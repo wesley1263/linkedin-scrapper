@@ -1,0 +1,5 @@
+Build scripts go: 
+go build -o experience-parser experience_parser.go 
+
+Execute to parser files html
+./linkedin-parser ./output/profile.html

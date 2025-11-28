@@ -1,0 +1,38 @@
+[
+  {
+    "degree_name": "Bacharelado",
+    "degree_level": "BACHELOR",
+    "course_title": "Psicologia",
+    "start_date": "2016-01-01",
+    "end_date": "2021-12-31",
+    "institution": {
+      "name": "Universidade Federal de Santa Catarina",
+      "url": "https://www.linkedin.com/company/ufsc",
+      "avatar_url": "https://assets.enrichlayer.com/pp/hero-img/540ebb047e584c3e5d43e9b4b9fb6a3f"
+    }
+  },
+  {
+    "degree_name": "Especialização",
+    "degree_level": "POST_BACHELOR",
+    "course_title": "Gestão de talentos e carreiras",
+    "start_date": "2021-01-01",
+    "end_date": "2022-12-31",
+    "institution": {
+      "name": "Pontifícia Universidade Católica do Paraná",
+      "url": "https://www.linkedin.com/company/pucproficial",
+      "avatar_url": "https://assets.enrichlayer.com/pp/hero-img/bc5b489e6575fbc375be381b7e81c4e2"
+    }
+  },
+  {
+    "degree_name": "Especialização",
+    "degree_level": "POST_BACHELOR",
+    "course_title": "Liderança organizacional",
+    "start_date": "2023-01-01",
+    "end_date": "2023-12-31",
+    "institution": {
+      "name": "Northwestern University",
+      "url": "https://www.linkedin.com/company/northwestern-university",
+      "avatar_url": "https://assets.enrichlayer.com/pp/hero-img/520467cbfa11dc32807cd64a53541c72"
+    }
+  }
+]

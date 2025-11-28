@@ -1,0 +1,146 @@
+[
+  {
+    "person_id": "",
+    "role_name": "Sr Risk Manager",
+    "start_date": "2024-08-01T00:00:00.000Z",
+    "is_current": true,
+    "end_date": null,
+    "description": "Gestão do time de Risco de Mercado da carteira proprietária do banco Desenvolvimento de novos processos e governança de risco Implementação das normas provenientes do FRTB",
+    "job_location": "",
+    "salary": {
+      "amount": 0,
+      "contract_type": "",
+      "currency": "BRL",
+      "payment_frequency": ""
+    },
+    "incentive_compensation": "",
+    "conditions": "",
+    "realizations": [],
+    "linkedin_url": "https://www.linkedin.com/company/bradesco",
+    "avatar_url": "https://media.licdn.com/dms/image/v2/C4E0BAQEXB9xussWsHQ/company-logo_100_100/company-logo_100_100/0/1680038081185/bradesco_logo?e=1766016000\u0026v=beta\u0026t=UD28wKMp_YTL3vtRgE5tEtI_5CFm2UiAqGSFjPybyKk",
+    "company": {
+      "corporation_id": "",
+      "name": "Bradesco"
+    }
+  },
+  {
+    "person_id": "",
+    "role_name": "Risk Coordinator",
+    "start_date": "2021-03-01T00:00:00.000Z",
+    "is_current": false,
+    "end_date": "2022-05-31T00:00:00.000Z",
+    "description": "Gestão de equipe com foco em eficiência e otimização Acompanhamento de indicadores de risco de mercado e liquidez Implantação de sistema de risco de mercado e compliance de fundos de investimento",
+    "job_location": "",
+    "salary": {
+      "amount": 0,
+      "contract_type": "",
+      "currency": "BRL",
+      "payment_frequency": ""
+    },
+    "incentive_compensation": "",
+    "conditions": "",
+    "realizations": [],
+    "linkedin_url": "https://www.linkedin.com/company/santanderam",
+    "avatar_url": "https://media.licdn.com/dms/image/v2/D4D0BAQH_QiatUlp6Vg/company-logo_100_100/company-logo_100_100/0/1688370776290/santanderam_logo?e=1766016000\u0026v=beta\u0026t=fH3Bq4OK-H4LgnzvfXR1KdfpLQWt_7t2mqBpqcATfGg",
+    "company": {
+      "corporation_id": "",
+      "name": "Santander Asset Management"
+    }
+  },
+  {
+    "person_id": "",
+    "role_name": "Founder",
+    "start_date": "2015-03-01T00:00:00.000Z",
+    "is_current": false,
+    "end_date": "2020-03-31T00:00:00.000Z",
+    "description": "MBA prático: Empreender criando e implementando plano de negócio na área de alimentação saudável com processos para torná-la autônoma visando a expansão por franquias. Capacitação com cursos: gastronomia, gestão e planejamento de restaurantes, técnicas de atendimento, empreendedorismo, gestão de equipe, técnicas de congelamento e processos da vigilância sanitária. Definição de processos, estratégias, layouts, cardápio, equipamentos, divulgações, plataformas de pedido e contratações. Operacionalização da empresa e gestão de equipe de 15 funcionários. Captação de novos clientes e negociação com fornecedores. Desenvolvimento de controles financeiro, contábil e de estoque.",
+    "job_location": "",
+    "salary": {
+      "amount": 0,
+      "contract_type": "",
+      "currency": "BRL",
+      "payment_frequency": ""
+    },
+    "incentive_compensation": "",
+    "conditions": "",
+    "realizations": [],
+    "linkedin_url": "https://www.linkedin.com/company/fitioca",
+    "avatar_url": "https://media.licdn.com/dms/image/v2/C510BAQGKBICPDtKQSg/company-logo_100_100/company-logo_100_100/0/1631322003460?e=1766016000\u0026v=beta\u0026t=tptTrk0gbW-8vl3LxEyRawhoN4RLZw_OFXIpLYyAAbg",
+    "company": {
+      "corporation_id": "",
+      "name": "Fitioca"
+    }
+  },
+  {
+    "person_id": "",
+    "role_name": "Treasury and Market Risk Coordinator",
+    "start_date": "2012-09-01T00:00:00.000Z",
+    "is_current": false,
+    "end_date": "2015-02-28T00:00:00.000Z",
+    "description": "Gestão de equipe de Front Office com as seguintes responsabilidades: Operações Estruturadas – Estudo e negociação de operações estruturadas para captação de recursos; Hedge de operações – Definição de estratégias de hedge para mitigar o risco de mercado das operações da empresa; Controle de fluxo de caixa – Administração e controle de caixa de R$ 4 bilhões, alocação dos recursos financeiros e atendimento das necessidades de fluxo de caixa; Insumos de mercado – Desenvolvimento de processo para utilizar séries de preço e captar curvas com a expectativa do mercado, utilizando feeders como BM\u0026F e Bloomberg; Precificação das operações da Tesouraria – Acompanhar e precificar os produtos operados pela tesouraria da Suzano, definindo seus MtMs e reportando o resultado das operações; Sistema de controle de risco – Desenvolvimento e acompanhamento de sistema de cálculo de risco com as principais métricas utilizadas no mercado: VaR paramétrico e histórico, cenários de stress e limite de DV01;",
+    "job_location": "",
+    "salary": {
+      "amount": 0,
+      "contract_type": "",
+      "currency": "BRL",
+      "payment_frequency": ""
+    },
+    "incentive_compensation": "",
+    "conditions": "",
+    "realizations": [],
+    "linkedin_url": "https://www.linkedin.com/company/suzano",
+    "avatar_url": "https://media.licdn.com/dms/image/v2/D4D0BAQElJUhFgxnLbA/company-logo_100_100/company-logo_100_100/0/1705929541728/suzano_logo?e=1766016000\u0026v=beta\u0026t=NFUpXQAzqiSJbX0gQqEKOyDxWvaZBdFbykYvNrYsQyc",
+    "company": {
+      "corporation_id": "",
+      "name": "Suzano Papel e Celulose"
+    }
+  },
+  {
+    "person_id": "",
+    "role_name": "Market Risk Analyst Senior",
+    "start_date": "2010-04-01T00:00:00.000Z",
+    "is_current": false,
+    "end_date": "2012-09-30T00:00:00.000Z",
+    "description": "Precificação dos produtos de Tesouraria – Acompanhar e homologar a precificação dos produtos operados pela tesouraria do banco, desde a modelagem até a sua implantação em sistema, os cálculos de risco necessários para os novos produtos de tesouraria operados pelo banco; Homologação do risco de novos produtos – Acompanhar e homologar, desde a modelagem até a sua implantação em sistema, os cálculos de risco necessários para os novos produtos de tesouraria operados pelo banco; Desenvolvimento de indicadores – Desenvolvimento de indicadores de risco nas operações da tesouraria do banco, com o intuito de prevenir grandes perdas em cenários inesperados; Sistema de controle de risco diário – Manutenção e melhoria do sistema de cálculo de risco diário e análise de limites, composto por várias calculadoras interligadas responsáveis pelo risco de mercado do banco.\nAplicação de metodologias acadêmicas – Análise de metodologias desenvolvidas recentemente no meio acadêmico e desenvolvimento destas para aplicação em problemas reais do banco; Modelo de best time to call – Desenvolvimento de modelo estatístico visando apontar quais os melhores horários para contatar o próprio cliente em ligações de cobrança; Estudo de técnicas de seleção de variáveis – Estudo visando entender detalhadamente as novas técnicas de modelagem estatística e uso de tais técnicas em problemas reais no banco; Modelo de sobrevivência em público de cartões – Estudo e desenvolvimento de modelo de behavior de clientes de cartões de crédito usando análise de sobrevivência.\nModelo de credit scoring para cartão de crédito – Desenvolvimento de modelo estatístico visando selecionar os melhores clientes para a concessão de cartão de crédito; Monitoramento de modelos ativos – Criação de monitoramento automático dos modelos, gerando gráficos semanais e mensais sobre o comportamento da população escorada e estabilidade das variáveis; Valuation de informações – Avaliação do trade-off entre impacto financeiro e o ganho de performance com a utilização de informações externas (ACSP e Serasa) nos modelos ativos.\nAnálise de campanhas de marketing – Analisar estatisticamente a eficácia das campanhas de marketing do banco utilizando SAS, descobrir nichos de mercado com maior propensão a estas e gerar apresentações de alto padrão para o conglomerado; Estudos de prospect – Realizar, em conjunto com outras áreas do banco, modelagem para indicar os perfis de clientes de maior propensão, otimizando as campanhas de marketing; Indicadores – Criar indicadores eficientes para demonstrar evolução de venda, adesão, volume financeiro, valor presente líquido ou qualquer outra variável pertinente.",
+    "job_location": "",
+    "salary": {
+      "amount": 0,
+      "contract_type": "",
+      "currency": "BRL",
+      "payment_frequency": ""
+    },
+    "incentive_compensation": "",
+    "conditions": "",
+    "realizations": [],
+    "linkedin_url": "https://www.linkedin.com/company/itau",
+    "avatar_url": "https://media.licdn.com/dms/image/v2/D4D0BAQGmyPiGIU-69w/company-logo_100_100/B4DZZFc2k4GgAQ-/0/1744921914031/itau_logo?e=1766016000\u0026v=beta\u0026t=I-gnlDEkW0-9XLAJldDqG4bzirxR918N4o51O4HYNB4",
+    "company": {
+      "corporation_id": "",
+      "name": "Itau-Unibanco"
+    }
+  },
+  {
+    "person_id": "",
+    "role_name": "Mathematical Modeling Analyst",
+    "start_date": "2005-06-01T00:00:00.000Z",
+    "is_current": false,
+    "end_date": "2006-02-28T00:00:00.000Z",
+    "description": "Planejamento de produção da Multibrás - projeto protótipo de auxilio à tomada de decisão desenvolvido para a Multibrás, definido a quantidade a produzir de cada artigo, respeitando capacidades produtivas e mão-de-obra disponível; Planejamento de placas da CST (Companhia Siderúrgica de Tubarão) - projeto que teve como objetivo otimizar a quantidade de materiais que seriam utilizados no processo de produção encadeada de placas – onde placas distintas utilizavam matérias-primas em comum – para satisfazer todas as demandas reduzindo ao mínimo os custos dos processos; Modelagem matemática de diversos problemas, utilizando softwares matemáticos para resolução (AIMMS, Matlab, Mathematica, SAS, Excel) e algumas linguagens (C++, VBA, Pascal, Fortran, SQL).\nIf you think this goes against our Professional Community Policies, please let us know.\nAnalista de Riscos de Mercado PL | IRRBB | Engenheiro Civil\nIf you think this goes against our Professional Community Policies, please let us know.",
+    "job_location": "",
+    "salary": {
+      "amount": 0,
+      "contract_type": "",
+      "currency": "BRL",
+      "payment_frequency": ""
+    },
+    "incentive_compensation": "",
+    "conditions": "",
+    "realizations": [],
+    "linkedin_url": "https://www.linkedin.com/company/unisoma",
+    "avatar_url": "https://media.licdn.com/dms/image/v2/C4D0BAQGYCKMGqYVIGg/company-logo_100_100/company-logo_100_100/0/1630478985867/unisoma_logo?e=1766016000\u0026v=beta\u0026t=_NQR20ed07mfv9Cho3w6A8Dn1BOsNRf4M9xsDBuI3eM",
+    "company": {
+      "corporation_id": "",
+      "name": "Unisoma"
+    }
+  }
+]
