@@ -88,12 +88,11 @@ brew install chromedriver
 
 ### Credenciais do LinkedIn
 
-**IMPORTANTE**: Antes de usar, você deve configurar suas credenciais do LinkedIn no arquivo [main.py](main.py:181-182):
+As credenciais são lidas das variáveis de ambiente `LINKEDIN_EMAIL` e `LINKEDIN_PASSWORD` (obrigatórias em `main.py` e `linkedin.py`):
 
-```python
-# main.py (linhas 181-182)
-email = "seu-email@example.com"
-password = "sua-senha"
+```bash
+export LINKEDIN_EMAIL="seu-email@example.com"
+export LINKEDIN_PASSWORD="sua-senha"
 ```
 
 **ATENÇÃO**: Nunca compartilhe suas credenciais publicamente ou faça commit delas no repositório!

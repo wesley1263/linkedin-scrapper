@@ -1,0 +1,15 @@
+# Sessão e credenciais
+linkedin_cookies.json
+.env
+
+# Dados coletados
+output/
+resumes/
+
+# Binários dos parsers Go
+/linkedin-parser
+/experience-parser
+/education-parser
+/language-parser
+
+__pycache__/

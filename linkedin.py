@@ -28,8 +28,8 @@ logging.basicConfig(
 # -------------------------
 # CONFIGURAÇÕES
 # -------------------------
-EMAIL = "weslei.souza.flowef@gmail.com"
-PASSWORD = "Raqwes252123@3"
+EMAIL = os.getenv("LINKEDIN_EMAIL")
+PASSWORD = os.getenv("LINKEDIN_PASSWORD")
 DOWNLOAD_DIR = "./resumes"
 TIMEOUT = 30
 # -------------------------
@@ -466,5 +466,9 @@ if __name__ == "__main__":
         print("python linkedin.py https://www.linkedin.com/in/wansilvasan/")
         sys.exit(1)
     
+    if not EMAIL or not PASSWORD:
+        print("❌ Defina LINKEDIN_EMAIL e LINKEDIN_PASSWORD no ambiente")
+        sys.exit(1)
+
     profile_url = sys.argv[1]
     main(profile_url)

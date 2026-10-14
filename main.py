@@ -1,4 +1,5 @@
 import os
+import json
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -8,6 +9,7 @@ import time
 import tempfile
 from selenium.webdriver.common.keys import Keys
 
+COOKIES_FILE = "linkedin_cookies.json"
 class LinkedInScraper:
     def __init__(self):
         self.driver = None
@@ -16,6 +18,8 @@ class LinkedInScraper:
     def setup_driver(self):
         """Configura o driver do Chrome com opções anti-detecção"""
         options = Options()
+        # Perfil persistente
+        options.add_argument("--user-data-dir=/home/weslei/.linkedin_chrome_profile")
         # options.add_argument("--headless") 
         options.add_argument('--no-sandbox')
         options.add_argument('--disable-dev-shm-usage')
@@ -32,6 +36,57 @@ class LinkedInScraper:
         self.driver = webdriver.Chrome(options=options)
         self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
     
+
+
+
+    def save_cookies(self):
+        """Salva cookies após login bem-sucedido"""
+        with open(COOKIES_FILE, "w") as f:
+            json.dump(self.driver.get_cookies(), f)
+
+    def load_cookies(self):
+        """Carrega cookies salvos"""
+        if not os.path.exists(COOKIES_FILE):
+            return False
+
+        self.driver.get("https://www.linkedin.com")
+        with open(COOKIES_FILE, "r") as f:
+            cookies = json.load(f)
+
+        for cookie in cookies:
+            # Remove campos problemáticos
+            cookie.pop("sameSite", None)
+            cookie.pop("expiry", None)
+            try:
+                self.driver.add_cookie(cookie)
+            except:
+                continue
+        return True
+
+    def is_logged_in(self):
+        """Verifica se sessão está ativa"""
+        self.driver.get("https://www.linkedin.com/feed")
+        try:
+            WebDriverWait(self.driver, 5).until(
+                EC.presence_of_element_located((By.CLASS_NAME, "global-nav"))
+            )
+            return True
+        except:
+            return False
+
+    def ensure_login(self, email, password):
+        """Login inteligente: reutiliza sessão ou faz login"""
+        if self.load_cookies() and self.is_logged_in():
+            print("✓ Sessão reutilizada")
+            return True
+
+        print("→ Sessão expirada, fazendo login...")
+        if self.login(email, password):
+            self.save_cookies()
+            return True
+        return False
+
+        
     def login(self, email, password):
         """Faz login no LinkedIn"""
         try:
@@ -62,12 +117,6 @@ class LinkedInScraper:
         except Exception as e:
             print(f"Erro no login: {str(e)}")
             return False
-    
-   
-      
-
-    
-    from selenium.webdriver.common.keys import Keys
 
     def scroll_to_bottom(self):
         """Scroll usando teclas - mais confiável"""
@@ -172,18 +221,20 @@ class LinkedInScraper:
 
 # Exemplo de uso
 if __name__ == "__main__":
+    email = os.getenv("LINKEDIN_EMAIL")
+    password = os.getenv("LINKEDIN_PASSWORD")
+    if not email or not password:
+        raise SystemExit("Defina LINKEDIN_EMAIL e LINKEDIN_PASSWORD no ambiente")
+
     profile_url = input("Insira o URL do perfil a ser analisado: ")
     start_time = time.time()
     scraper = LinkedInScraper()
     
     try:
         # Fazer login
-        email = "weslei.souza.flowef@gmail.com"
-        password = "Raqwes252123@3"
-        
-        if scraper.login(email, password):
+        if scraper.ensure_login(email, password):
             # URL do perfil a ser analisado
-            dir_name = profile_url.split("https://www.linkedin.com/in/")[1].replace("/", "")
+            dir_name = profile_url.replace("https://www.linkedin.com/in/", "").replace("/", "")
             output_dir = f"./output/{dir_name}"
             os.makedirs(output_dir, exist_ok=True)
 
@@ -194,7 +245,7 @@ if __name__ == "__main__":
             scraper.click_more_buttons()  # expande todos os textos truncados
             scraper.save_html_and_screenshot("profile.html", output_dir)
             os.system(f"./linkedin-parser {output_dir}/profile.html {output_dir}/profile.json")
-            os.remove(f"{output_dir}/profile.html")
+            # os.remove(f"{output_dir}/profile.html")
 
             # Experiências
             scraper.driver.get(profile_url + "details/experience/?locale=pt_BR")
@@ -202,7 +253,7 @@ if __name__ == "__main__":
             scraper.load_all_content()  # carrega tudo
             scraper.save_html_and_screenshot("experience.html", output_dir)
             os.system(f"./experience-parser {output_dir}/experience.html {output_dir}/experience.json")
-            os.remove(f"{output_dir}/experience.html")
+            # os.remove(f"{output_dir}/experience.html")
 
             # Formação Acadêmica
             scraper.driver.get(profile_url + "details/education/?locale=pt_BR")
@@ -210,7 +261,7 @@ if __name__ == "__main__":
             scraper.load_all_content()  # carrega tudo
             scraper.save_html_and_screenshot("education.html", output_dir)
             os.system(f"./education-parser {output_dir}/education.html {output_dir}/education.json")
-            os.remove(f"{output_dir}/education.html")
+            # os.remove(f"{output_dir}/education.html")
 
             # Idiomas
             scraper.driver.get(profile_url + "details/languages/?locale=pt_BR")
