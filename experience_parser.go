@@ -78,60 +78,148 @@ func main() {
 	fmt.Printf("Experiências extraídas com sucesso: %s (%d experiências)\n", outputFile, len(experiences))
 }
 
+var (
+	itemKeyRe = regexp.MustCompile(`componentkey="entity-collection-item`)
+	pRe       = regexp.MustCompile(`(?s)<p\b[^>]*>(.*?)</p>`)
+	liStartRe = regexp.MustCompile(`<li\b`)
+	logoAltRe = regexp.MustCompile(`alt="([^"]+) logo"`)
+	avatarRe  = regexp.MustCompile(`alt="[^"]*logo[^"]*"\s+src="([^"]+)"`)
+	companyRe = regexp.MustCompile(`href="(https://www\.linkedin\.com/company/[^"/]+)/?"`)
+	brRe      = regexp.MustCompile(`(?i)<br\s*/?>`)
+	tagRe     = regexp.MustCompile(`<[^>]+>`)
+	spaceRe   = regexp.MustCompile(`[ \t\r\f\v\x{00a0}]+`)
+
+	// "May 2019 - Present · 7 yrs", "2023 – 2024", "mai de 2019 - o momento"
+	datePart   = `(?:([A-Za-z]{3})[a-z]*\.?\s+(?:de\s+)?)?(\d{4})`
+	dateLineRe = regexp.MustCompile(`(?i)^` + datePart + `(?:\s*[-–—]\s*(?:` + datePart + `|(present|o momento|atual)))?\s*(?:·.*)?$`)
+)
+
+var monthNumbers = map[string]int{
+	"jan": 1, "feb": 2, "fev": 2, "mar": 3, "apr": 4, "abr": 4,
+	"may": 5, "mai": 5, "jun": 6, "jul": 7, "aug": 8, "ago": 8,
+	"sep": 9, "set": 9, "oct": 10, "out": 10, "nov": 11, "dec": 12, "dez": 12,
+}
+
 func parseExperiences(htmlContent string) []Experience {
 	var experiences []Experience
 
-	// Decodificar HTML entities
-	htmlContent = html.UnescapeString(htmlContent)
-
-	// Extrair blocos de experiência
-	// Padrão: empresa logo -> cargo -> empresa · tipo -> data -> descrição
-	blocks := extractExperienceBlocks(htmlContent)
-
-	for _, block := range blocks {
-		exp := parseExperienceBlock(block)
-		if exp.RoleName != "" && exp.Company.Name != "" {
-			experiences = append(experiences, exp)
+	for _, block := range extractItemBlocks(htmlContent) {
+		for _, exp := range parseItem(block) {
+			if exp.RoleName != "" && exp.Company.Name != "" {
+				experiences = append(experiences, exp)
+			}
 		}
 	}
 
 	return experiences
 }
 
-func extractExperienceBlocks(htmlContent string) []string {
+// extractItemBlocks retorna o HTML de cada item da lista de experiências
+// (div com componentkey="entity-collection-item-..."), delimitado pelo fechamento da div
+func extractItemBlocks(htmlContent string) []string {
+	if i := strings.Index(htmlContent, `data-testid="profile_ExperienceDetailsSection`); i >= 0 {
+		htmlContent = htmlContent[i:]
+	}
+
 	var blocks []string
-
-	// Encontra todos os blocos de empresa pelo logo
-	// aria-label="COMPANY logo"
-	logoRe := regexp.MustCompile(`aria-label="([^"]+) logo"`)
-	logoMatches := logoRe.FindAllStringSubmatchIndex(htmlContent, -1)
-
-	for i, match := range logoMatches {
-		start := match[0]
-		var end int
-		if i+1 < len(logoMatches) {
-			end = logoMatches[i+1][0]
-		} else {
-			end = len(htmlContent)
+	lastEnd := 0
+	for _, loc := range itemKeyRe.FindAllStringIndex(htmlContent, -1) {
+		start := strings.LastIndex(htmlContent[:loc[0]], "<div")
+		if start < lastEnd {
+			continue // item aninhado em outro já extraído
 		}
-
-		block := htmlContent[start:end]
-		// Verificar se o bloco contém dados de experiência (datas no formato "Mon YYYY")
-		if containsDatePattern(block) {
-			blocks = append(blocks, block)
-		}
+		block := balancedBlock(htmlContent, start, "div")
+		blocks = append(blocks, block)
+		lastEnd = start + len(block)
 	}
 
 	return blocks
 }
 
-func containsDatePattern(s string) bool {
-	dateRe := regexp.MustCompile(`(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4}`)
-	return dateRe.MatchString(s)
+// balancedBlock retorna o elemento <tag> que começa em start, até a tag de fechamento correspondente
+func balancedBlock(s string, start int, tag string) string {
+	re := regexp.MustCompile(`<` + tag + `\b|</` + tag + `>`)
+	depth := 0
+	for _, loc := range re.FindAllStringIndex(s[start:], -1) {
+		if s[start+loc[0]+1] == '/' {
+			depth--
+		} else {
+			depth++
+		}
+		if depth == 0 {
+			return s[start : start+loc[1]]
+		}
+	}
+	return s[start:]
 }
 
-func parseExperienceBlock(block string) Experience {
-	exp := Experience{
+// parseItem trata os dois formatos de item:
+//   - cargo único:   [cargo, "Empresa · Tipo", datas, local?]
+//   - vários cargos: [empresa, "Tipo · duração", local?] + um <li> por cargo: [cargo, tipo?, datas, local?]
+func parseItem(block string) []Experience {
+	base := newExperience()
+	if match := companyRe.FindStringSubmatch(block); len(match) > 1 {
+		base.LinkedInURL = match[1]
+	}
+	if match := avatarRe.FindStringSubmatch(block); len(match) > 1 {
+		base.AvatarURL = html.UnescapeString(match[1])
+	}
+	if match := logoAltRe.FindStringSubmatch(block); len(match) > 1 {
+		base.Company.Name = cleanHTML(match[1])
+	}
+
+	header := headerTexts(block)
+	dateIdx := indexOfDateLine(header)
+
+	// Cargo único
+	if dateIdx >= 1 {
+		exp := base
+		exp.RoleName = header[0]
+		if dateIdx >= 2 {
+			exp.Company.Name = strings.Split(header[1], " · ")[0]
+		}
+		fillDatesAndLocation(&exp, header, dateIdx, "")
+		exp.Description = extractDescription(block)
+		return []Experience{exp}
+	}
+
+	// Vários cargos na mesma empresa
+	if len(header) == 0 {
+		return nil
+	}
+	base.Company.Name = header[0]
+	groupLocation := ""
+	if len(header) > 2 {
+		groupLocation = locationText(header[2])
+	}
+
+	var experiences []Experience
+	lastEnd := 0
+	for _, loc := range liStartRe.FindAllStringIndex(block, -1) {
+		if loc[0] < lastEnd {
+			continue
+		}
+		li := balancedBlock(block, loc[0], "li")
+		lastEnd = loc[0] + len(li)
+
+		liHeader := headerTexts(li)
+		idx := indexOfDateLine(liHeader)
+		if idx < 1 {
+			continue
+		}
+		exp := base
+		exp.Realizations = []interface{}{}
+		exp.RoleName = liHeader[0]
+		fillDatesAndLocation(&exp, liHeader, idx, groupLocation)
+		exp.Description = extractDescription(li)
+		experiences = append(experiences, exp)
+	}
+
+	return experiences
+}
+
+func newExperience() Experience {
+	return Experience{
 		PersonID:              "",
 		Salary:                Salary{Amount: 0, ContractType: "", Currency: "BRL", PaymentFrequency: ""},
 		IncentiveCompensation: "",
@@ -139,283 +227,140 @@ func parseExperienceBlock(block string) Experience {
 		Realizations:          []interface{}{},
 		Company:               Company{CorporationID: ""},
 	}
-
-	// Extrair nome da empresa do logo
-	logoRe := regexp.MustCompile(`aria-label="([^"]+) logo"`)
-	if match := logoRe.FindStringSubmatch(block); len(match) > 1 {
-		exp.Company.Name = strings.TrimSpace(match[1])
-	}
-
-	// Extrair URL do LinkedIn da empresa
-	companyURLRe := regexp.MustCompile(`href="(https://www\.linkedin\.com/company/[^"/]+)/?"`)
-	if match := companyURLRe.FindStringSubmatch(block); len(match) > 1 {
-		exp.LinkedInURL = match[1]
-	}
-
-	// Extrair avatar URL da empresa
-	avatarRe := regexp.MustCompile(`alt="[^"]*logo[^"]*"\s+src="([^"]+)"`)
-	if match := avatarRe.FindStringSubmatch(block); len(match) > 1 {
-		exp.AvatarURL = strings.ReplaceAll(match[1], "&amp;", "&")
-	}
-
-	// Extrair cargo - geralmente está em um <p> antes da data
-	// Padrões comuns:
-	// 1. "Role Name</p>" antes de "Company · Type"
-	// 2. "Role Name</p>" antes de "Mon YYYY"
-	exp.RoleName = extractRoleName(block)
-
-	// Extrair datas
-	exp.StartDate, exp.EndDate, exp.IsCurrent = extractDates(block)
-
-	// Extrair localização (se houver)
-	exp.JobLocation = extractLocation(block)
-
-	// Extrair descrição
-	exp.Description = extractDescription(block)
-
-	return exp
 }
 
-func extractRoleName(block string) string {
-	// Converter para linhas para facilitar a análise
-	lines := strings.Split(block, ">")
-
-	// Padrões de cargo comuns
-	rolePatterns := []string{
-		`^((?:Senior|Junior|Lead|Staff|Principal|Head|Chief|Manager|Director|VP|Founder|Co-Founder|Intern|Trainee|Analyst|Engineer|Developer|Designer|Recruiter|Sourcer|Specialist|Coordinator|Consultant|Advisor|Assistant|Professor|Researcher|Scientist|Writer|Editor|Executive|Partner|Owner|CEO|CTO|CFO|COO|CMO|CIO|CHRO)?\s*[A-Za-zÀ-ÿ\s|@&-]+)(?:</p|$)`,
-	}
-
-	// Procurar padrões específicos de cargo
-	specificRoles := []string{
-		"Senior Technical Sourcer",
-		"Tech Sourcer",
-		"Co-Founder",
-		"Content Creator",
-		"Talent Acquisition",
-		"Tech Recruiter",
-		"Pesquisadora",
-		"Bolsista de Iniciação Científica",
-		"Assessora de Psicologia Organizacional",
-		"Assistente administrativa",
-		"Professora de inglês",
-	}
-
-	for _, line := range lines {
-		cleanLine := strings.TrimSpace(line)
-		for _, role := range specificRoles {
-			if strings.Contains(cleanLine, role) {
-				// Extrair o cargo completo
-				re := regexp.MustCompile(`([^<>]+)(?:</p|$)`)
-				if match := re.FindStringSubmatch(cleanLine); len(match) > 1 {
-					candidate := strings.TrimSpace(match[1])
-					// Verificar se não é uma empresa ou data
-					if !strings.Contains(candidate, " · ") &&
-						!strings.Contains(candidate, " - ") &&
-						!containsDatePattern(candidate) &&
-						len(candidate) > 3 &&
-						len(candidate) < 100 {
-						return cleanHTML(candidate)
-					}
-				}
-			}
+// headerTexts retorna os textos dos <p> do cabeçalho do item (antes de descrição, skills e sub-cargos)
+func headerTexts(block string) []string {
+	end := len(block)
+	for _, marker := range []string{`data-testid="expandable-text-box"`, "skill-associations-details", "<li"} {
+		// A partir de 1: o próprio bloco pode começar com <li
+		if i := strings.Index(block[1:], marker); i >= 0 && i+1 < end {
+			end = i + 1
 		}
 	}
 
-	// Busca genérica por padrões de cargo
-	for _, line := range lines {
-		cleanLine := strings.TrimSpace(line)
-		for _, pattern := range rolePatterns {
-			re := regexp.MustCompile(pattern)
-			if match := re.FindStringSubmatch(cleanLine); len(match) > 1 {
-				candidate := strings.TrimSpace(match[1])
-				if isValidRoleName(candidate) {
-					return cleanHTML(candidate)
-				}
-			}
+	var texts []string
+	for _, match := range pRe.FindAllStringSubmatch(block[:end], -1) {
+		// <p> com link são skills ("X, Y and +1 skill"), não local
+		if strings.Contains(match[1], "<a ") {
+			continue
+		}
+		text := cleanHTML(match[1])
+		if text != "" && !strings.Contains(text, "helped me get this job") && !strings.HasPrefix(text, "Skills:") {
+			texts = append(texts, text)
 		}
 	}
-
-	// Fallback: buscar qualquer texto antes de " · " que pareça cargo
-	re := regexp.MustCompile(`>([^<>]+)</p>`)
-	matches := re.FindAllStringSubmatch(block, -1)
-	for _, match := range matches {
-		candidate := strings.TrimSpace(match[1])
-		if isValidRoleName(candidate) && !strings.Contains(candidate, " · ") {
-			return cleanHTML(candidate)
-		}
-	}
-
-	return ""
+	return texts
 }
 
-func isValidRoleName(s string) bool {
-	s = strings.TrimSpace(s)
+func indexOfDateLine(texts []string) int {
+	for i, text := range texts {
+		if isDateLine(text) {
+			return i
+		}
+	}
+	return -1
+}
 
-	// Muito curto ou muito longo
-	if len(s) < 4 || len(s) > 100 {
+func isDateLine(text string) bool {
+	match := dateLineRe.FindStringSubmatch(text)
+	if match == nil {
 		return false
 	}
-
-	// É uma data
-	if containsDatePattern(s) {
-		return false
-	}
-
-	// Contém padrões de não-cargo
-	invalidPatterns := []string{
-		" · ", "yrs", "mos", "Present",
-		"http", "www.", ".com",
-		"logo", "thumbnail",
-	}
-	for _, p := range invalidPatterns {
-		if strings.Contains(s, p) {
+	for _, month := range []string{match[1], match[3]} {
+		if month != "" && monthNumbers[strings.ToLower(month)] == 0 {
 			return false
 		}
 	}
-
-	// Deve conter palavras típicas de cargo ou ser um nome simples
-	roleIndicators := []string{
-		"Senior", "Junior", "Lead", "Staff", "Principal", "Head", "Chief",
-		"Manager", "Director", "VP", "Founder", "Co-Founder", "Intern",
-		"Analyst", "Engineer", "Developer", "Designer", "Recruiter", "Sourcer",
-		"Specialist", "Coordinator", "Consultant", "Advisor", "Assistant",
-		"Professor", "Researcher", "Scientist", "Executive", "Partner",
-		"Owner", "CEO", "CTO", "CFO", "Talent", "Tech", "Software",
-		"Pesquisador", "Bolsista", "Assessor", "Assistente", "Estagiário",
-	}
-
-	for _, indicator := range roleIndicators {
-		if strings.Contains(strings.ToLower(s), strings.ToLower(indicator)) {
-			return true
-		}
-	}
-
-	return false
+	return true
 }
 
-func extractDates(block string) (startDate string, endDate *string, isCurrent bool) {
-	// Padrão: "Mon YYYY - Mon YYYY" ou "Mon YYYY - Present"
-	dateRe := regexp.MustCompile(`((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4})\s*-\s*((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4}|Present)`)
-	match := dateRe.FindStringSubmatch(block)
+func fillDatesAndLocation(exp *Experience, texts []string, dateIdx int, defaultLocation string) {
+	exp.StartDate, exp.EndDate, exp.IsCurrent = parseDateLine(texts[dateIdx])
+	exp.JobLocation = defaultLocation
+	if dateIdx+1 < len(texts) {
+		exp.JobLocation = locationText(texts[dateIdx+1])
+	}
+}
 
-	if len(match) > 2 {
-		startDate = formatDateISO(match[1])
+// locationText remove o modelo de trabalho ("São Paulo, Brazil · Hybrid" -> "São Paulo, Brazil")
+func locationText(text string) string {
+	return strings.TrimSpace(strings.Split(text, " · ")[0])
+}
 
-		if match[2] == "Present" {
-			isCurrent = true
-			endDate = nil
-		} else {
-			isCurrent = false
-			endDateStr := formatDateISO(match[2])
-			// Ajustar para último dia do mês
-			endDateStr = adjustEndDate(endDateStr)
-			endDate = &endDateStr
-		}
+func parseDateLine(line string) (startDate string, endDate *string, isCurrent bool) {
+	match := dateLineRe.FindStringSubmatch(line)
+	if match == nil {
+		return
 	}
 
+	startDate = formatDate(match[1], match[2], 1, false)
+
+	switch {
+	case match[5] != "":
+		isCurrent = true
+	case match[4] != "":
+		end := formatDate(match[3], match[4], 12, true)
+		endDate = &end
+	default:
+		// Data única: termina no fim do mesmo período
+		end := formatDate(match[1], match[2], 12, true)
+		endDate = &end
+	}
 	return
 }
 
-func formatDateISO(dateStr string) string {
-	// Converter "Mon YYYY" para "YYYY-MM-01T00:00:00.000Z"
-	months := map[string]string{
-		"Jan": "01", "Feb": "02", "Mar": "03", "Apr": "04",
-		"May": "05", "Jun": "06", "Jul": "07", "Aug": "08",
-		"Sep": "09", "Oct": "10", "Nov": "11", "Dec": "12",
+// formatDate converte mês/ano para ISO; sem mês usa defaultMonth. endOfMonth usa o último dia do mês
+func formatDate(month, year string, defaultMonth int, endOfMonth bool) string {
+	m := defaultMonth
+	if month != "" {
+		m = monthNumbers[strings.ToLower(month)]
 	}
+	var y int
+	fmt.Sscanf(year, "%d", &y)
 
-	parts := strings.Fields(dateStr)
-	if len(parts) == 2 {
-		month := months[parts[0]]
-		year := parts[1]
-		if month != "" && year != "" {
-			return fmt.Sprintf("%s-%s-01T00:00:00.000Z", year, month)
-		}
+	t := time.Date(y, time.Month(m), 1, 0, 0, 0, 0, time.UTC)
+	if endOfMonth {
+		t = t.AddDate(0, 1, -1)
 	}
-
-	return ""
+	return t.Format("2006-01-02T15:04:05.000Z")
 }
 
-func adjustEndDate(dateStr string) string {
-	// Ajustar para o último dia do mês
-	if dateStr == "" {
+// extractDescription pega o texto expansível do item, preservando quebras de linha
+func extractDescription(block string) string {
+	i := strings.Index(block, `data-testid="expandable-text-box"`)
+	if i < 0 {
 		return ""
 	}
-
-	// Parse a data
-	t, err := time.Parse("2006-01-02T15:04:05.000Z", dateStr)
-	if err != nil {
-		return dateStr
+	rest := block[i:]
+	rest = rest[strings.Index(rest, ">")+1:]
+	if end := strings.Index(rest, "</p>"); end >= 0 {
+		rest = rest[:end]
 	}
 
-	// Ir para o próximo mês e voltar um dia
-	nextMonth := t.AddDate(0, 1, 0)
-	lastDay := nextMonth.AddDate(0, 0, -1)
+	rest = brRe.ReplaceAllString(rest, "\n")
+	rest = html.UnescapeString(tagRe.ReplaceAllString(rest, " "))
 
-	return lastDay.Format("2006-01-02T15:04:05.000Z")
-}
-
-func extractLocation(block string) string {
-	// Padrões de localização
-	locationPatterns := []string{
-		`(São Paulo[^<]*Brasil)`,
-		`(Florianópolis[^<]*Brasil)`,
-		`(San Francisco[^<]*Estados Unidos)`,
-		`(San Francisco[^<]*United States)`,
-		`([A-Za-zÀ-ÿ\s]+,\s*[A-Za-zÀ-ÿ\s]+,\s*(?:Brasil|Brazil|Estados Unidos|United States|USA))`,
-		`([A-Za-zÀ-ÿ\s]+\s+e\s+Região,\s*Brasil)`,
-	}
-
-	for _, pattern := range locationPatterns {
-		re := regexp.MustCompile(pattern)
-		if match := re.FindStringSubmatch(block); len(match) > 1 {
-			return cleanHTML(strings.TrimSpace(match[1]))
+	var lines []string
+	for _, line := range strings.Split(rest, "\n") {
+		line = strings.TrimSpace(spaceRe.ReplaceAllString(line, " "))
+		if line != "" {
+			lines = append(lines, line)
 		}
 	}
-
-	return ""
-}
-
-func extractDescription(block string) string {
-	var descriptions []string
-
-	// Procurar por textos descritivos (geralmente após as datas)
-	// Textos longos entre tags
-	re := regexp.MustCompile(`>([^<]{50,})<`)
-	matches := re.FindAllStringSubmatch(block, -1)
-
-	for _, match := range matches {
-		text := strings.TrimSpace(match[1])
-		// Filtrar textos que não são descrição
-		if !strings.Contains(text, "css") &&
-			!strings.Contains(text, "script") &&
-			!strings.Contains(text, "{") &&
-			!strings.Contains(text, "class=") &&
-			!strings.HasPrefix(text, "http") &&
-			len(text) > 50 {
-			descriptions = append(descriptions, cleanHTML(text))
-		}
-	}
-
-	// Juntar todas as descrições encontradas
-	if len(descriptions) > 0 {
-		return strings.Join(descriptions, "\n")
-	}
-
-	return ""
+	return strings.Join(lines, "\n")
 }
 
 func cleanHTML(s string) string {
 	// Remove tags HTML
-	re := regexp.MustCompile(`<[^>]+>`)
-	s = re.ReplaceAllString(s, " ")
+	s = tagRe.ReplaceAllString(s, " ")
 
 	// Decodificar entidades HTML
 	s = html.UnescapeString(s)
+	s = strings.ReplaceAll(s, "​", "")
 
 	// Limpar espaços extras
-	re = regexp.MustCompile(`\s+`)
-	s = re.ReplaceAllString(s, " ")
+	s = regexp.MustCompile(`\s+`).ReplaceAllString(s, " ")
 
 	return strings.TrimSpace(s)
 }

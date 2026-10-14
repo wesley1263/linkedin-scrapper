@@ -120,6 +120,8 @@ func extractName(html string) (firstName, lastName string) {
 	matches := re.FindStringSubmatch(html)
 	if len(matches) > 1 {
 		fullName := strings.TrimSpace(matches[1])
+		// Remove o contador de notificações do título: "(26) Nome Sobrenome"
+		fullName = regexp.MustCompile(`^\(\d+\+?\)\s*`).ReplaceAllString(fullName, "")
 		parts := strings.SplitN(fullName, " ", 2)
 		firstName = parts[0]
 		if len(parts) > 1 {
@@ -333,8 +335,8 @@ func extractDescription(htmlContent string) string {
 
 	// Busca alternativa pelo padrão "My career" ou "Minha carreira"
 	patterns := []string{
-		`(?is)(my career[^<]{50,1500})`,
-		`(?is)(minha carreira[^<]{50,1500})`,
+		`(?is)(my career[^<]{50,1000})`,
+		`(?is)(minha carreira[^<]{50,1000})`,
 	}
 
 	for _, pattern := range patterns {
