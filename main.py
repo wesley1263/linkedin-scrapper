@@ -53,10 +53,15 @@ class LinkedInScraper:
         with open(COOKIES_FILE, "r") as f:
             cookies = json.load(f)
 
+        now = time.time()
         for cookie in cookies:
             # Remove campos problemáticos
             cookie.pop("sameSite", None)
-            cookie.pop("expiry", None)
+            # Mantém a validade (sem ela o cookie vira de sessão e some ao fechar o Chrome)
+            if "expiry" in cookie:
+                if cookie["expiry"] < now:
+                    continue
+                cookie["expiry"] = int(cookie["expiry"])
             try:
                 self.driver.add_cookie(cookie)
             except:
@@ -64,20 +69,28 @@ class LinkedInScraper:
         return True
 
     def is_logged_in(self):
-        """Verifica se sessão está ativa"""
+        """Verifica se sessão está ativa (sem sessão, /feed redireciona para login/authwall)"""
         self.driver.get("https://www.linkedin.com/feed")
         try:
-            WebDriverWait(self.driver, 5).until(
-                EC.presence_of_element_located((By.CLASS_NAME, "global-nav"))
+            WebDriverWait(self.driver, 10).until(
+                lambda d: d.execute_script("return document.readyState") == "complete"
             )
-            return True
         except:
-            return False
+            pass
+        return "/feed" in self.driver.current_url
 
     def ensure_login(self, email, password):
         """Login inteligente: reutiliza sessão ou faz login"""
+        # O perfil persistente do Chrome já guarda a sessão; checar antes de injetar
+        # cookies do arquivo, que podem estar velhos e sobrescrever a sessão válida
+        if self.is_logged_in():
+            print("✓ Sessão do perfil do Chrome reutilizada")
+            self.save_cookies()
+            return True
+
         if self.load_cookies() and self.is_logged_in():
-            print("✓ Sessão reutilizada")
+            print("✓ Sessão reutilizada a partir dos cookies salvos")
+            self.save_cookies()
             return True
 
         print("→ Sessão expirada, fazendo login...")
@@ -91,7 +104,12 @@ class LinkedInScraper:
         """Faz login no LinkedIn"""
         try:
             self.driver.get('https://www.linkedin.com/login')
-            
+
+            # Perfil persistente do Chrome já autenticado: /login redireciona direto pro feed
+            if "/feed" in self.driver.current_url:
+                print("Sessão do perfil do Chrome já ativa")
+                return True
+
             # Aguarda e preenche email
             email_field = WebDriverWait(self.driver, 10).until(
                 EC.presence_of_element_located((By.ID, "username"))
@@ -106,10 +124,13 @@ class LinkedInScraper:
             login_button = self.driver.find_element(By.XPATH, "//button[@type='submit']")
             login_button.click()
             
-            # Aguarda redirecionamento
+            # Aguarda chegar no feed; se cair em checkpoint (2FA/captcha), dá tempo de resolver manualmente
             WebDriverWait(self.driver, 15).until(
-                EC.presence_of_element_located((By.CLASS_NAME, "global-nav"))
+                lambda d: "/feed" in d.current_url or "/checkpoint" in d.current_url
             )
+            if "/checkpoint" in self.driver.current_url:
+                print("Verificação de segurança detectada, resolva no navegador (até 2 min)...")
+                WebDriverWait(self.driver, 120).until(lambda d: "/feed" in d.current_url)
             
             print("Login realizado com sucesso!")
             return True
