@@ -43,6 +43,10 @@ Não há testes nem lint configurados. Para validar mudança em um parser, recom
   - `experience_parser.go` é o modelo para a marcação atual: cada item é um `div[componentkey^="entity-collection-item"]` (recortado por balanceamento de `<div>`), com os `<p>` em ordem cargo → "Empresa · Tipo" → datas → local; empresa com vários cargos vem como cabeçalho + um `<li>` por cargo. Descrição em `data-testid="expandable-text-box"`. HTMLs reais para teste ficam em `output/*/experience.html`. `language_parser.go` segue o mesmo esquema (`<p>` = [idioma, nível]); os 5 níveis do LinkedIn mapeiam 1:1 para `BASIC`…`FLUENT`.
   - `education_parser.go` também: `<p>` = [instituição, "Grau, Área"?, datas?]. Sem itens reconhecidos devolve `[]` (não há mais fallback com dados de exemplo). A ordem dos `case` em `normalizeDegreeLevel` importa ("Pós-graduação" contém "graduação").
 
+## Decisões de arquitetura
+
+ADRs (todos com status Proposto) e o roteiro para virar serviço estão em `.adrs/` — ler `.adrs/melhorias.md` antes de mudanças estruturais.
+
 ## Cuidados
 
 - Credenciais vêm só de `LINKEDIN_EMAIL`/`LINKEDIN_PASSWORD` — nunca voltar a colocá-las no código. `linkedin_cookies.json` contém sessão ativa e, junto com `output/`, `resumes/` e os binários Go, está no `.gitignore`.
