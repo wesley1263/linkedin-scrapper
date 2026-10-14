@@ -102,10 +102,10 @@ export LINKEDIN_PASSWORD="sua-senha"
 ### Scraping de Perfil Completo
 
 ```bash
-python main.py
+python main.py https://www.linkedin.com/in/username/
 ```
 
-O script irá solicitar a URL do perfil a ser analisado:
+Roda sem abrir o navegador (headless). Sem a URL como argumento, o script a solicita:
 
 ```
 Insira o URL do perfil a ser analisado: https://www.linkedin.com/in/username/
@@ -279,12 +279,10 @@ which chromedriver
 
 ### Debugging
 
-Para ativar o modo visual (sem headless):
+O `main.py` roda em modo headless por padrão. Para ver o navegador (ou resolver uma verificação de segurança/2FA do LinkedIn):
 
-```python
-# main.py, linha 19
-# Comentar esta linha:
-# options.add_argument("--headless")
+```bash
+python main.py --visible https://www.linkedin.com/in/username/
 ```
 
 ## Segurança

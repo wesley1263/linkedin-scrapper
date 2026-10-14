@@ -5,14 +5,18 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
+from selenium.common.exceptions import TimeoutException
 import time
 import tempfile
+import subprocess
+import sys
 from selenium.webdriver.common.keys import Keys
 
 COOKIES_FILE = "linkedin_cookies.json"
 class LinkedInScraper:
-    def __init__(self):
+    def __init__(self, headless=True):
         self.driver = None
+        self.headless = headless
         self.setup_driver()
     
     def setup_driver(self):
@@ -20,7 +24,10 @@ class LinkedInScraper:
         options = Options()
         # Perfil persistente
         options.add_argument("--user-data-dir=/home/weslei/.linkedin_chrome_profile")
-        # options.add_argument("--headless") 
+        if self.headless:
+            options.add_argument("--headless=new")
+            # Sem tamanho explícito o headless abre em 800x600 e o LinkedIn pode servir layout mobile
+            options.add_argument("--window-size=1920,1080")
         options.add_argument('--no-sandbox')
         options.add_argument('--disable-dev-shm-usage')
         options.add_argument('--disable-blink-features=AutomationControlled')
@@ -128,6 +135,9 @@ class LinkedInScraper:
             WebDriverWait(self.driver, 15).until(
                 lambda d: "/feed" in d.current_url or "/checkpoint" in d.current_url
             )
+            if "/checkpoint" in self.driver.current_url and self.headless:
+                print("Verificação de segurança detectada; rode com --visible para resolvê-la no navegador")
+                return False
             if "/checkpoint" in self.driver.current_url:
                 print("Verificação de segurança detectada, resolva no navegador (até 2 min)...")
                 WebDriverWait(self.driver, 120).until(lambda d: "/feed" in d.current_url)
@@ -147,18 +157,20 @@ class LinkedInScraper:
         
         body = self.driver.find_element(By.TAG_NAME, "body")
         
-        last_height = self.driver.execute_script("return document.documentElement.scrollTop")
-        
+        get_height = lambda d: d.execute_script("return document.documentElement.scrollHeight")
+
         for i in range(20):
+            last_height = get_height(self.driver)
             body.send_keys(Keys.END)  # vai direto pro fim
-            time.sleep(1)
-            
-            new_height = self.driver.execute_script("return document.documentElement.scrollTop")
-            if new_height == last_height:
+            # Sai assim que a página parar de crescer (lazy load terminou)
+            try:
+                WebDriverWait(self.driver, 1.5, poll_frequency=0.2).until(
+                    lambda d: get_height(d) > last_height
+                )
+            except TimeoutException:
                 break
-            last_height = new_height
-        
-        print(f"Scroll finalizado. Posição: {last_height}")
+
+        print(f"Scroll finalizado. Altura: {get_height(self.driver)}")
 
     def find_scrollable_container(self):
         """Encontra qual elemento é scrollável"""
@@ -203,19 +215,48 @@ class LinkedInScraper:
         except Exception as e:
             print(f"Erro ao salvar HTML: {e}")
             
+    def wait_until_stable(self, timeout=15, quiet=1.0):
+        """Espera a página carregar e o DOM ficar `quiet` segundos sem mudar de tamanho"""
+        end = time.time() + timeout
+        last_size = None
+        stable_since = time.time()
+        while time.time() < end:
+            size = self.driver.execute_script(
+                "return document.readyState === 'complete' ? document.body.innerHTML.length : -1"
+            )
+            if size != last_size:
+                last_size = size
+                stable_since = time.time()
+            elif size >= 0 and time.time() - stable_since >= quiet:
+                return True
+            time.sleep(0.2)
+        return False
+
+    def open_tab(self, url):
+        """Abre url em nova aba sem bloquear (carrega em paralelo) e retorna o handle"""
+        before = set(self.driver.window_handles)
+        self.driver.execute_script("window.open(arguments[0], '_blank');", url)
+        try:
+            WebDriverWait(self.driver, 5).until(lambda d: len(d.window_handles) > len(before))
+            return (set(self.driver.window_handles) - before).pop()
+        except TimeoutException:
+            # window.open bloqueado: abre a aba pelo Selenium (carregamento bloqueante)
+            self.driver.switch_to.new_window("tab")
+            self.driver.get(url)
+            return self.driver.current_window_handle
+
     def load_all_content(self):
         """Clica em Load more até não haver mais"""
         clicks = 0
         while True:
+            # Página já estável: se não há botão agora, não há o que carregar
+            buttons = self.driver.find_elements(By.XPATH, "//button[.//span[text()='Load more']]")
+            if not buttons:
+                break
             try:
-                button = WebDriverWait(self.driver, 5).until(
-                    EC.element_to_be_clickable((By.XPATH, "//button[.//span[text()='Load more']]"))
-                )
-                self.driver.execute_script("arguments[0].scrollIntoView();", button)
-                time.sleep(0.5)
-                button.click()
+                self.driver.execute_script("arguments[0].scrollIntoView(); arguments[0].click();", buttons[0])
                 clicks += 1
-                time.sleep(2)
+                self.wait_until_stable(timeout=5, quiet=0.7)
             except:
                 break
         
@@ -232,13 +273,27 @@ class LinkedInScraper:
             for button in buttons:
                 try:
                     self.driver.execute_script("arguments[0].click();", button)
-                    time.sleep(0.3)
                 except:
                     continue
-            
+
+            if buttons:
+                self.wait_until_stable(timeout=5, quiet=0.5)
             return len(buttons)
         except:
             return 0
+
+# (arquivo, path relativo ao perfil, binário do parser)
+DETAIL_SECTIONS = [
+    ("experience", "details/experience/", "experience-parser"),
+    ("education", "details/education/", "education-parser"),
+    ("languages", "details/languages/", "language-parser"),
+]
+
+
+def run_parser(parser, output_dir, name):
+    """Roda o parser Go em background sobre <name>.html, gerando <name>.json"""
+    return subprocess.Popen([f"./{parser}", f"{output_dir}/{name}.html", f"{output_dir}/{name}.json"])
+
 
 # Exemplo de uso
 if __name__ == "__main__":
@@ -247,51 +302,50 @@ if __name__ == "__main__":
     if not email or not password:
         raise SystemExit("Defina LINKEDIN_EMAIL e LINKEDIN_PASSWORD no ambiente")
 
-    profile_url = input("Insira o URL do perfil a ser analisado: ")
+    # Uso: python main.py [--visible] [<profile_url>]
+    args = sys.argv[1:]
+    visible = "--visible" in args
+    urls = [a for a in args if a != "--visible"]
+    profile_url = urls[0] if urls else input("Insira o URL do perfil a ser analisado: ")
     start_time = time.time()
-    scraper = LinkedInScraper()
+    scraper = LinkedInScraper(headless=not visible)
     
     try:
         # Fazer login
         if scraper.ensure_login(email, password):
-            # URL do perfil a ser analisado
-            dir_name = profile_url.replace("https://www.linkedin.com/in/", "").replace("/", "")
+            base_url = profile_url.split("?")[0].rstrip("/") + "/"
+            dir_name = base_url.replace("https://www.linkedin.com/in/", "").replace("/", "")
             output_dir = f"./output/{dir_name}"
             os.makedirs(output_dir, exist_ok=True)
 
-            scraper.driver.get(profile_url + "?locale=pt_BR")
-            time.sleep(10)
+            main_tab = scraper.driver.current_window_handle
+            # Abre as seções de detalhe em abas para carregarem em paralelo com o perfil
+            tabs = {
+                name: scraper.open_tab(f"{base_url}{path}?locale=pt_BR")
+                for name, path, _ in DETAIL_SECTIONS
+            }
+            parsers = []
+
+            # Perfil
+            scraper.driver.switch_to.window(main_tab)
+            scraper.driver.get(base_url + "?locale=pt_BR")
+            scraper.wait_until_stable()
             scraper.scroll_to_bottom()  # scroll até o fim
-            # scraper.find_scrollable_container()  # encontra containers scrolláveis
             scraper.click_more_buttons()  # expande todos os textos truncados
             scraper.save_html_and_screenshot("profile.html", output_dir)
-            os.system(f"./linkedin-parser {output_dir}/profile.html {output_dir}/profile.json")
-            # os.remove(f"{output_dir}/profile.html")
+            parsers.append(run_parser("linkedin-parser", output_dir, "profile"))
 
-            # Experiências
-            scraper.driver.get(profile_url + "details/experience/?locale=pt_BR")
-            time.sleep(3)  # espera inicial
-            scraper.load_all_content()  # carrega tudo
-            scraper.save_html_and_screenshot("experience.html", output_dir)
-            os.system(f"./experience-parser {output_dir}/experience.html {output_dir}/experience.json")
-            # os.remove(f"{output_dir}/experience.html")
+            # Experiências, formação e idiomas (já carregadas nas abas)
+            for name, _, parser in DETAIL_SECTIONS:
+                scraper.driver.switch_to.window(tabs[name])
+                scraper.wait_until_stable()
+                scraper.load_all_content()  # carrega tudo
+                scraper.save_html_and_screenshot(f"{name}.html", output_dir)
+                parsers.append(run_parser(parser, output_dir, name))
 
-            # Formação Acadêmica
-            scraper.driver.get(profile_url + "details/education/?locale=pt_BR")
-            time.sleep(3)  # espera inicial
-            scraper.load_all_content()  # carrega tudo
-            scraper.save_html_and_screenshot("education.html", output_dir)
-            os.system(f"./education-parser {output_dir}/education.html {output_dir}/education.json")
-            # os.remove(f"{output_dir}/education.html")
+            for proc in parsers:
+                proc.wait()
 
-            # Idiomas
-            scraper.driver.get(profile_url + "details/languages/?locale=pt_BR")
-            time.sleep(3)  # espera inicial
-            scraper.load_all_content()  # carrega tudo
-            scraper.save_html_and_screenshot("languages.html", output_dir)
-            os.system(f"./language-parser {output_dir}/languages.html" f" {output_dir}/languages.json")
-            # os.remove(f"{output_dir}/languages.html")
-            
         else:
             print("Falha no login")
             

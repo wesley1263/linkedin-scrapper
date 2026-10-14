@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"html"
 	"io/ioutil"
 	"log"
 	"os"
@@ -163,6 +164,18 @@ func normalizeProficiencyLevel(proficiencyText string) ProficiencyLevel {
 
 	// Mapeamento de palavras-chave para níveis de proficiência
 	switch {
+	// Os 5 níveis do LinkedIn (en/pt), do mais alto para o mais baixo
+	case strings.Contains(proficiencyText, "native or bilingual") || strings.Contains(proficiencyText, "nativo ou bilíngue"):
+		return FLUENT
+	case strings.Contains(proficiencyText, "full professional") || strings.Contains(proficiencyText, "profissional completa"):
+		return ADVANCED
+	case strings.Contains(proficiencyText, "professional working") || strings.Contains(proficiencyText, "proficiência profissional"):
+		return INTERMEDIATE
+	case strings.Contains(proficiencyText, "limited working") || strings.Contains(proficiencyText, "limitada"):
+		return BASIC_INT
+	case strings.Contains(proficiencyText, "elementary proficiency") || strings.Contains(proficiencyText, "elementar"):
+		return BASIC
+
 	case strings.Contains(proficiencyText, "fluente") || strings.Contains(proficiencyText, "fluent") ||
 		strings.Contains(proficiencyText, "nativo") || strings.Contains(proficiencyText, "native") ||
 		strings.Contains(proficiencyText, "materno") || strings.Contains(proficiencyText, "mother") ||
@@ -194,7 +207,7 @@ func getLanguageCode(languageName string) string {
 	languageName = strings.ToLower(strings.TrimSpace(languageName))
 
 	// Remove caracteres especiais e espaços extras
-	languageName = regexp.MustCompile(`[^\w\s-]`).ReplaceAllString(languageName, "")
+	languageName = regexp.MustCompile(`[^\p{L}\s-]`).ReplaceAllString(languageName, "")
 	languageName = strings.Join(strings.Fields(languageName), " ")
 
 	// Procura no mapa de códigos
@@ -202,9 +215,12 @@ func getLanguageCode(languageName string) string {
 		return code
 	}
 
-	// Procura por palavras parciais
+	// Procura por palavras parciais (ignora códigos curtos como "de"/"no", que casam em qualquer nome)
 	for name, code := range languageCodeMap {
-		if strings.Contains(languageName, name) || strings.Contains(name, languageName) {
+		if len([]rune(name)) < 4 {
+			continue
+		}
+		if strings.Contains(languageName, name) {
 			return code
 		}
 	}
@@ -229,273 +245,83 @@ func (lp *LanguageParser) extractLanguageData() []Language {
 	return nil
 }
 
-// extractStructuredLanguages extrai dados usando estruturas HTML comuns do LinkedIn
+var (
+	itemKeyRe = regexp.MustCompile(`componentkey="entity-collection-item`)
+	pRe       = regexp.MustCompile(`(?s)<p\b[^>]*>(.*?)</p>`)
+	tagRe     = regexp.MustCompile(`<[^>]+>`)
+	spaceRe   = regexp.MustCompile(`\s+`)
+)
+
+// extractStructuredLanguages extrai os idiomas dos itens da lista
+// (div com componentkey="entity-collection-item-..."), cujos <p> são [idioma, nível?]
 func (lp *LanguageParser) extractStructuredLanguages() []Language {
 	var languages []Language
 
-	// Patterns para identificar blocos de idiomas
-	patterns := []string{
-		`<div[^>]*class="[^"]*language[^"]*"[^>]*>(.*?)</div>`,
-		`<div[^>]*data-section="language"[^>]*>(.*?)</div>`,
-		`<li[^>]*class="[^"]*language[^"]*"[^>]*>(.*?)</li>`,
-		`<section[^>]*id="[^"]*language[^"]*"[^>]*>(.*?)</section>`,
-		`<div[^>]*class="[^"]*skill[^"]*"[^>]*>(.*?)</div>`,
+	content := lp.htmlContent
+	if i := strings.Index(content, `data-testid="profile_LanguageDetails`); i >= 0 {
+		content = content[i:]
 	}
 
-	for _, pattern := range patterns {
-		regex := regexp.MustCompile(`(?s)` + pattern)
-		matches := regex.FindAllStringSubmatch(lp.htmlContent, -1)
+	lastEnd := 0
+	for _, loc := range itemKeyRe.FindAllStringIndex(content, -1) {
+		start := strings.LastIndex(content[:loc[0]], "<div")
+		if start < lastEnd {
+			continue // item aninhado em outro já extraído
+		}
+		block := balancedBlock(content, start, "div")
+		lastEnd = start + len(block)
 
-		for _, match := range matches {
-			if len(match) > 1 {
-				// Processa sub-itens dentro da seção
-				itemLanguages := lp.parseLanguageSection(match[1])
-				languages = append(languages, itemLanguages...)
+		var texts []string
+		for _, match := range pRe.FindAllStringSubmatch(block, -1) {
+			if text := cleanText(match[1]); text != "" {
+				texts = append(texts, text)
 			}
 		}
+		if len(texts) == 0 {
+			continue
+		}
 
-		if len(languages) > 0 {
-			break
+		lang := Language{
+			Language:     getLanguageCode(texts[0]),
+			LanguageText: texts[0],
+			Proficiency:  EMPTY,
+		}
+		if len(texts) > 1 {
+			lang.Proficiency = normalizeProficiencyLevel(texts[1])
+		}
+		if lp.isValidLanguage(lang) {
+			languages = append(languages, lang)
 		}
 	}
 
 	return languages
 }
 
-// parseLanguageSection processa uma seção de idiomas e extrai itens individuais
-func (lp *LanguageParser) parseLanguageSection(sectionHTML string) []Language {
-	var languages []Language
-
-	// Patterns para itens individuais de idiomas dentro da seção
-	itemPatterns := []string{
-		`<div[^>]*class="[^"]*language-item[^"]*"[^>]*>(.*?)</div>`,
-		`<li[^>]*>(.*?)</li>`,
-		`<div[^>]*>(.*?)</div>`,
-	}
-
-	for _, pattern := range itemPatterns {
-		regex := regexp.MustCompile(`(?s)` + pattern)
-		matches := regex.FindAllStringSubmatch(sectionHTML, -1)
-
-		for _, match := range matches {
-			if len(match) > 1 {
-				language := lp.parseLanguageItem(match[1])
-				if lp.isValidLanguage(language) {
-					languages = append(languages, language)
-				}
-			}
+// balancedBlock retorna o elemento <tag> que começa em start, até a tag de fechamento correspondente
+func balancedBlock(s string, start int, tag string) string {
+	re := regexp.MustCompile(`<` + tag + `\b|</` + tag + `>`)
+	depth := 0
+	for _, loc := range re.FindAllStringIndex(s[start:], -1) {
+		if s[start+loc[0]+1] == '/' {
+			depth--
+		} else {
+			depth++
 		}
-
-		if len(languages) > 0 {
-			break
+		if depth == 0 {
+			return s[start : start+loc[1]]
 		}
 	}
-
-	// Se não encontrou itens estruturados, processa a seção inteira como um item
-	if len(languages) == 0 {
-		language := lp.parseLanguageItem(sectionHTML)
-		if lp.isValidLanguage(language) {
-			languages = append(languages, language)
-		}
-	}
-
-	return languages
+	return s[start:]
 }
 
-// parseLanguageItem extrai dados de um item de idioma específico
-func (lp *LanguageParser) parseLanguageItem(itemHTML string) Language {
-	language := Language{}
-
-	// Remove tags HTML e normaliza texto
-	textRegex := regexp.MustCompile(`<[^>]*>`)
-	text := textRegex.ReplaceAllString(itemHTML, " ")
-	text = strings.Join(strings.Fields(text), " ")
-
-	// Extrai nome do idioma e nível de proficiência
-	language.LanguageText = lp.extractLanguageName(text)
-	language.Language = getLanguageCode(language.LanguageText)
-	language.Proficiency = lp.extractProficiencyLevel(text)
-
-	return language
+func cleanText(s string) string {
+	s = html.UnescapeString(tagRe.ReplaceAllString(s, " "))
+	s = strings.ReplaceAll(s, "\u200b", "")
+	return strings.TrimSpace(spaceRe.ReplaceAllString(s, " "))
 }
 
-// extractLanguageName extrai o nome do idioma do texto
-func (lp *LanguageParser) extractLanguageName(text string) string {
-	// Lista de idiomas comuns para identificar
-	commonLanguages := []string{
-		"português", "portuguese", "inglês", "english", "espanhol", "spanish", "español",
-		"francês", "french", "français", "alemão", "german", "deutsch", "italiano", "italian",
-		"japonês", "japanese", "chinês", "chinese", "mandarin", "mandarim", "russo", "russian",
-		"árabe", "arabic", "holandês", "dutch", "coreano", "korean", "hindi",
-		"sueco", "swedish", "norueguês", "norwegian", "dinamarquês", "danish",
-	}
-
-	lowerText := strings.ToLower(text)
-
-	// Procura por idiomas conhecidos
-	for _, lang := range commonLanguages {
-		if strings.Contains(lowerText, strings.ToLower(lang)) {
-			return lang
-		}
-	}
-
-	// Pattern para capturar possíveis nomes de idiomas (palavras capitalizadas)
-	patterns := []string{
-		`\b([A-ZÀ-Ÿ][a-zà-ÿ]{3,15})\b`, // Palavra capitalizada de 4-16 caracteres
-		`\b([A-Za-zÀ-ÿ]{4,15}ês)\b`,    // Palavras terminadas em "ês" (português, inglês, etc.)
-		`\b([A-Za-zÀ-ÿ]{4,15}an)\b`,    // Palavras terminadas em "an" (german, etc.)
-	}
-
-	for _, pattern := range patterns {
-		regex := regexp.MustCompile(pattern)
-		matches := regex.FindAllStringSubmatch(text, -1)
-
-		for _, match := range matches {
-			if len(match) > 1 {
-				candidate := strings.TrimSpace(match[1])
-				if len(candidate) >= 4 && len(candidate) <= 15 && !lp.isCommonWord(candidate) && !lp.isProficiencyWord(candidate) {
-					return candidate
-				}
-			}
-		}
-	}
-
-	// Como fallback, pega a primeira palavra significativa
-	words := strings.Fields(text)
-	for _, word := range words {
-		if len(word) >= 4 && len(word) <= 15 && !lp.isCommonWord(word) && !lp.isProficiencyWord(word) {
-			return word
-		}
-	}
-
-	return ""
-}
-
-// isProficiencyWord verifica se uma palavra está relacionada a níveis de proficiência
-func (lp *LanguageParser) isProficiencyWord(word string) bool {
-	proficiencyWords := []string{
-		"proficiency", "proficiência", "level", "nível", "skill", "habilidade",
-		"fluent", "fluente", "advanced", "avançado", "intermediate", "intermediário",
-		"basic", "básico", "beginner", "iniciante", "native", "nativo", "elementary",
-		"elementar", "conversational", "conversação", "working", "professional",
-		"profissional", "limited", "limitado", "functional", "funcional",
-	}
-
-	lowerWord := strings.ToLower(word)
-	for _, profWord := range proficiencyWords {
-		if lowerWord == profWord {
-			return true
-		}
-	}
-
-	return false
-}
-
-// extractProficiencyLevel extrai o nível de proficiência do texto
-func (lp *LanguageParser) extractProficiencyLevel(text string) ProficiencyLevel {
-	// Palavras-chave para níveis de proficiência em diferentes idiomas
-	proficiencyKeywords := []string{
-		"fluente", "fluent", "nativo", "native", "materno", "mother tongue",
-		"avançado", "advanced", "proficiente", "proficient", "superior", "upper",
-		"intermediário", "intermediate", "médio", "medium", "middle",
-		"básico intermediário", "basic intermediate", "pré-intermediário", "pre-intermediate",
-		"elementary", "elementar", "básico", "basic", "iniciante", "beginner",
-	}
-
-	lowerText := strings.ToLower(text)
-
-	// Procura por palavras-chave de proficiência
-	for _, keyword := range proficiencyKeywords {
-		if strings.Contains(lowerText, keyword) {
-			return normalizeProficiencyLevel(keyword)
-		}
-	}
-
-	// Procura por patterns de nível
-	patterns := []string{
-		`(?i)(fluent|fluente|nativo|native)`,
-		`(?i)(advanced|avançado|proficient|proficiente)`,
-		`(?i)(intermediate|intermediário|médio)`,
-		`(?i)(basic|básico|beginner|iniciante)`,
-	}
-
-	for _, pattern := range patterns {
-		regex := regexp.MustCompile(pattern)
-		if matches := regex.FindStringSubmatch(text); len(matches) > 0 {
-			return normalizeProficiencyLevel(matches[0])
-		}
-	}
-
-	return EMPTY
-}
-
-// isCommonWord verifica se uma palavra é muito comum para ser um nome de idioma
-func (lp *LanguageParser) isCommonWord(word string) bool {
-	commonWords := []string{
-		"the", "and", "for", "with", "from", "about", "into", "through", "during",
-		"before", "after", "above", "below", "between", "among", "around",
-		"sobre", "para", "com", "por", "em", "de", "do", "da", "dos", "das",
-		"que", "como", "mais", "menos", "muito", "pouco", "bem", "mal",
-		"level", "skill", "language", "idioma", "língua", "proficiency", "proficiência",
-		"fluent", "fluente", "advanced", "avançado", "intermediate", "intermediário",
-		"basic", "básico", "beginner", "iniciante", "native", "nativo", "elementary",
-		"elementar", "upper", "superior", "lower", "inferior", "medium", "médio",
-		"conversational", "conversação", "working", "professional", "profissional",
-		"limited", "limitado", "functional", "funcional", "business", "negócios",
-	}
-
-	lowerWord := strings.ToLower(word)
-	for _, common := range commonWords {
-		if lowerWord == common {
-			return true
-		}
-	}
-
-	// Verifica se a palavra é muito curta (provavelmente não é um idioma)
-	if len(lowerWord) <= 2 {
-		return true
-	}
-
-	return false
-}
-
-// isValidLanguage verifica se o registro de idioma é válido
 func (lp *LanguageParser) isValidLanguage(lang Language) bool {
-	// Deve ter pelo menos o nome do idioma
-	return lang.LanguageText != "" && len(lang.LanguageText) >= 3
-}
-
-// fallbackLanguageExtraction tenta extrair dados usando busca de texto mais genérica
-func (lp *LanguageParser) fallbackLanguageExtraction() []Language {
-	// Se não encontrou dados estruturados, cria exemplo baseado no formato solicitado
-	log.Printf("Usando dados de exemplo de idiomas...")
-	return createSampleLanguageData()
-}
-
-// createSampleLanguageData cria dados de exemplo
-func createSampleLanguageData() []Language {
-	return []Language{
-		{
-			Language:     "ENG",
-			LanguageText: "English",
-			Proficiency:  ADVANCED,
-		},
-		{
-			Language:     "POR",
-			LanguageText: "Português",
-			Proficiency:  FLUENT,
-		},
-		{
-			Language:     "FRA",
-			LanguageText: "Francês",
-			Proficiency:  BASIC_INT,
-		},
-		{
-			Language:     "SPA",
-			LanguageText: "Espanhol",
-			Proficiency:  BASIC_INT,
-		},
-	}
+	return lang.LanguageText != "" && len([]rune(lang.LanguageText)) <= 50
 }
 
 // processHTMLFile processa um arquivo HTML e retorna dados de idiomas
