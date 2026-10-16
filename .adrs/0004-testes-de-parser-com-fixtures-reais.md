@@ -22,6 +22,6 @@ validadas manualmente rodando os binários contra HTMLs em `output/`.
 ## Consequências
 
 - **+** Mudanças de layout viram testes falhando, não dados errados no cadastro.
-- **+** Viabiliza a reescrita do [ADR-0001](0001-unificar-coleta-e-parsing-em-python.md) com garantia de paridade.
+- **+** Viabiliza a migração dos parsers para o projeto Go com goquery ([ADR-0001](0001-separar-coleta-python-e-parsing-go.md)) com garantia de paridade.
 - **−** Esforço inicial de anonimização; fixtures precisam ser atualizados quando o layout muda.
 - **Atenção:** HTML não anonimizado de terceiros **não** deve ser commitado (`output/` está no `.gitignore`).

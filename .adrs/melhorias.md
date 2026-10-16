@@ -1,6 +1,6 @@
 # Melhorias: do script ao serviço de enriquecimento
 
-_Data: 2026-10-14_
+_Data: 2026-10-14 · revisado em 2026-10-15_
 
 ## Resumo
 
@@ -24,29 +24,46 @@ risco (conta, LGPD, termos de uso).
 
 ## Arquitetura proposta
 
+Um pipeline em duas camadas, com o zip de HTML bruto como fronteira, e dois modos de uso (interface própria e API):
+
 ```
-Cliente (cadastro) ──POST /enrichments {linkedin_url}──▶ API (FastAPI)
-                    ◀── 202 {job_id} · GET /enrichments/{id} · webhook
-                                   │
-                              Fila (Redis/RQ ou SQS)
-                                   │
-                 Worker(s): 1 navegador + 1 sessão por worker
-                   ├─ coleta → HTML bruto no storage (S3/disco)
-                   ├─ parse (mesmo processo) → JSON validado (pydantic)
-                   └─ Postgres: perfil, seções, status, parser_version
+                    ┌──────────── Modo A: interface + extensão ────────────┐
+                    │ extensão no navegador do usuário ── zip + manifest ──┼──┐
+                    └──────────────────────────────────────────────────────┘  │
+                                                                              ▼
+Cliente ──POST /enrichments──▶ API (Go) ──▶ Postgres          Storage (S3/MinIO)
+(Modo B)◀── 202 {job_id}         │  ▲                                ▲        │
+        ◀── webhook / GET        │  │                                │        │
+                                 ▼  │                                │        │
+                      fila "collect"│                                │        │
+                                 ▼  │                                │        │
+                    Coletor Python (sessão do usuário) ── zip ───────┘        │
+                                    │                                         │
+                                    └── Parser worker (Go) ◀── fila "parse" ◀─┘
 ```
+
+- **Coleta (Python ou extensão):** só abre o perfil e salva os HTMLs num zip com manifest.
+- **Parsing (Go):** lê o zip, gera o JSON por seção e grava no banco com a versão do parser. Reprocessável a qualquer
+  momento sem acessar o LinkedIn.
+- **Contas:** cada usuário conecta a própria conta do LinkedIn; o serviço guarda só a sessão, cifrada, nunca a senha.
 
 Decisões detalhadas nos ADRs:
 
-- [ADR-0001](0001-unificar-coleta-e-parsing-em-python.md) — um único runtime Python (Playwright + selectolax)
+- [ADR-0001](0001-separar-coleta-python-e-parsing-go.md) — coleta em Python e parsing em Go, separados pelo HTML bruto
 - [ADR-0002](0002-armazenar-html-bruto-e-versionar-parsers.md) — guardar HTML bruto e versionar parsers
-- [ADR-0003](0003-processamento-assincrono-api-fila-workers.md) — API assíncrona com fila e workers
+- [ADR-0003](0003-processamento-assincrono-api-fila-workers.md) — API Go assíncrona com filas `collect` e `parse`
 - [ADR-0004](0004-testes-de-parser-com-fixtures-reais.md) — testes de parser com fixtures reais anonimizadas
-- [ADR-0005](0005-gestao-de-sessao-e-limite-de-ritmo.md) — sessão como recurso gerenciado e limite de ritmo
+- [ADR-0005](0005-gestao-de-sessao-e-limite-de-ritmo.md) — conta do próprio usuário, um coletor por sessão e limite de ritmo
 - [ADR-0006](0006-status-explicito-e-observabilidade.md) — status por seção e detecção de mudança de layout
 - [ADR-0007](0007-cache-com-ttl.md) — cache com TTL
-- [ADR-0008](0008-configuracao-por-ambiente-e-container.md) — configuração por ambiente e container
+- [ADR-0008](0008-configuracao-por-ambiente-e-container.md) — configuração por ambiente e containers
 - [ADR-0009](0009-conformidade-e-construir-vs-comprar.md) — LGPD, termos de uso e construir vs. comprar
+- [ADR-0010](0010-contrato-zip-e-manifest.md) — contrato zip + manifest entre coleta e parsing
+- [ADR-0011](0011-guardar-sessao-nao-senha.md) — guardar a sessão, não a senha (envelope encryption com KMS)
+- [ADR-0012](0012-dois-modos-de-conexao-e-coleta.md) — interface própria com extensão e API com conexão hospedada
+- [ADR-0013](0013-repositorios-separados-e-docker-compose.md) — um repositório por serviço e Docker Compose integrado
+- [ADR-0014](0014-camada-plugavel-de-fila-e-storage.md) — fila e storage plugáveis (RabbitMQ/SQS/Pub/Sub, MinIO/S3/GCS)
+- [ADR-0015](0015-escopo-da-primeira-versao.md) — primeira versão: paridade com o script atual, sem navegador remoto nem extensão
 
 ## Próximos passos (em ordem)
 
@@ -56,8 +73,13 @@ Decisões detalhadas nos ADRs:
    e são justamente os campos centrais para o cadastro. ~2h.
 3. **Tornar falhas visíveis** — trocar `except:` e `print` por logging e emitir status por seção
    ([ADR-0006](0006-status-explicito-e-observabilidade.md)). ~2h.
-4. **Unificar em um pacote Python e expor API + fila + worker** ([ADR-0001](0001-unificar-coleta-e-parsing-em-python.md),
-   [ADR-0003](0003-processamento-assincrono-api-fila-workers.md)). Alguns dias; só faz sentido depois de 1–3.
+4. **Separar as camadas em repositórios:** `linkedin-collector` (Python, evolução deste repositório) gerando zip +
+   manifest, `linkedin-enrichment` (Go, com `go.mod`: API + parser worker), filas `collect`/`parse` e o ambiente
+   integrado em `linkedin-enrichment-dev` ([ADR-0013](0013-repositorios-separados-e-docker-compose.md)) ([ADR-0001](0001-separar-coleta-python-e-parsing-go.md),
+   [ADR-0003](0003-processamento-assincrono-api-fila-workers.md), [ADR-0010](0010-contrato-zip-e-manifest.md)).
+   Alguns dias; só faz sentido depois de 1–3.
+5. **Contas por usuário:** conexão interativa e sessões cifradas com KMS
+   ([ADR-0005](0005-gestao-de-sessao-e-limite-de-ritmo.md), [ADR-0011](0011-guardar-sessao-nao-senha.md)).
 
 Fora da ordem, mas urgente: **trocar a senha da conta do LinkedIn** (continua no histórico do git).
 
@@ -65,9 +87,10 @@ Fora da ordem, mas urgente: **trocar a senha da conta do LinkedIn** (continua no
 
 **Fase 0 — Higiene (1–2 dias):** passos 1 a 3 acima, mais remoção de caminhos fixos e da dependência do diretório atual.
 
-**Fase 1 — Serviço para enriquecer cadastro:** pacote Python único com testes, API + fila + 1 worker, Postgres + storage
-de HTML bruto, cache com TTL, imagem Docker. Atende o caso "enriquecer o cadastro quando entra um candidato".
+**Fase 1 — Primeira versão, paridade com o script atual** ([ADR-0015](0015-escopo-da-primeira-versao.md)): coletor
+Python + serviço Go (API e parser) com testes, filas e storage plugáveis, Postgres, sessão cifrada conectada por login
+interativo, containers e `docker compose` integrado. Faz o que o script já faz, só que estruturado.
 
-**Fase 2 — Escala / enriquecimento em massa:** pool de workers e contas com limite de ritmo, reprocessamento por versão
-de parser, alertas de mudança de layout. Antes de investir aqui, fechar a questão jurídica e a comparação com
-fornecedor ([ADR-0009](0009-conformidade-e-construir-vs-comprar.md)).
+**Fase 2 — Produto e escala:** extensão de navegador para a interface própria (Modo A), conexão hospedada com navegador
+remoto para a API (Modo B), multi-tenant, cache com TTL, contas por usuário, reprocessamento por versão de parser, alertas de mudança de layout. Antes de investir aqui, fechar a questão jurídica e a comparação com
+fornecedor ([ADR-0009](0009-conformidade-e-construir-vs-comprar.md)), em especial antes de oferecer a API como SaaS.
