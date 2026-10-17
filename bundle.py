@@ -1,4 +1,5 @@
 """Zip imutável + manifest.json de uma coleta (ADR-0010): o contrato entre coleta e parsing. Só stdlib."""
+import io
 import json
 import os
 import zipfile
@@ -87,20 +88,31 @@ def validate_manifest(manifest):
     return problems
 
 
-def write_bundle(raw_dir, source_dir, manifest):
-    """Grava `<raw_dir>/<collected_at>.zip` com o manifest e os HTMLs listados nele; devolve o caminho.
+def bundle_key(profile, manifest):
+    """Chave no storage: `raw/<perfil-normalizado>/<collected_at>.zip` (colunas e hífens do timestamp removidos)."""
+    stamp = manifest["collected_at"].replace("-", "").replace(":", "")
+    return f"raw/{profile}/{stamp}.zip"
 
-    Nunca sobrescreve: se o zip já existe, falha (FileExistsError).
-    """
+
+def build_zip(source_dir, manifest):
+    """Zip em memória com o manifest e os HTMLs listados nele (lidos de `source_dir`)."""
     problems = validate_manifest(manifest)
     if problems:
         raise ValueError("manifest inválido: " + "; ".join(problems))
-    os.makedirs(raw_dir, exist_ok=True)
-    stamp = manifest["collected_at"].replace("-", "").replace(":", "")
-    path = os.path.join(raw_dir, f"{stamp}.zip")
-    with zipfile.ZipFile(path, "x", zipfile.ZIP_DEFLATED) as zf:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2))
         for entry in manifest["sections"].values():
             if entry["file"]:
                 zf.write(os.path.join(source_dir, entry["file"]), entry["file"])
-    return path
+    return buf.getvalue()
+
+
+def parse_message(manifest, zip_key):
+    """Mensagem do tópico `parse` (ADR-0014: só IDs e a chave do zip, nunca o conteúdo)."""
+    return json.dumps({
+        "schema_version": SCHEMA_VERSION,
+        "job_id": manifest["job_id"],
+        "linkedin_url": manifest["linkedin_url"],
+        "zip_key": zip_key,
+    }).encode()
