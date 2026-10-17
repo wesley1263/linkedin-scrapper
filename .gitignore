@@ -7,9 +7,6 @@ output/
 resumes/
 
 # Binários dos parsers Go
-/linkedin-parser
-/experience-parser
-/education-parser
-/language-parser
+/enrichment/bin/
 
 __pycache__/

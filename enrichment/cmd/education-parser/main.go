@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html"
 	"io/ioutil"
+	"linkedin-enrichment/internal/parser"
 	"log"
 	"os"
 	"regexp"
@@ -146,7 +147,7 @@ func (ep *EducationParser) extractEducationData() []Education {
 		if start < lastEnd {
 			continue // item aninhado em outro já extraído
 		}
-		block := balancedBlock(content, start, "div")
+		block := parser.BalancedBlock(content, start, "div")
 		lastEnd = start + len(block)
 
 		if edu, ok := parseEducationItem(block); ok {
@@ -160,7 +161,7 @@ func (ep *EducationParser) extractEducationData() []Education {
 func parseEducationItem(block string) (Education, bool) {
 	var texts []string
 	for _, match := range pRe.FindAllStringSubmatch(block, -1) {
-		if text := cleanText(match[1]); text != "" {
+		if text := parser.CleanText(match[1]); text != "" {
 			texts = append(texts, text)
 		}
 	}
@@ -176,7 +177,7 @@ func parseEducationItem(block string) (Education, bool) {
 	if len(texts) > 0 {
 		edu.Institution.Name = texts[0]
 	} else if match := logoAltRe.FindStringSubmatch(block); len(match) > 1 {
-		edu.Institution.Name = cleanText(match[1])
+		edu.Institution.Name = parser.CleanText(match[1])
 	}
 	if edu.Institution.Name == "" {
 		return edu, false
@@ -259,29 +260,6 @@ func formatDate(month, year string, defaultMonth int, endOfMonth bool) string {
 		t = t.AddDate(0, 1, -1)
 	}
 	return t.Format("2006-01-02")
-}
-
-// balancedBlock retorna o elemento <tag> que começa em start, até a tag de fechamento correspondente
-func balancedBlock(s string, start int, tag string) string {
-	re := regexp.MustCompile(`<` + tag + `\b|</` + tag + `>`)
-	depth := 0
-	for _, loc := range re.FindAllStringIndex(s[start:], -1) {
-		if s[start+loc[0]+1] == '/' {
-			depth--
-		} else {
-			depth++
-		}
-		if depth == 0 {
-			return s[start : start+loc[1]]
-		}
-	}
-	return s[start:]
-}
-
-func cleanText(s string) string {
-	s = html.UnescapeString(tagRe.ReplaceAllString(s, " "))
-	s = strings.ReplaceAll(s, "​", "")
-	return strings.TrimSpace(spaceRe.ReplaceAllString(s, " "))
 }
 
 // processHTMLFile processa um arquivo HTML e retorna dados de educação

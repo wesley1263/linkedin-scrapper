@@ -3,8 +3,8 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"html"
 	"io/ioutil"
+	"linkedin-enrichment/internal/parser"
 	"log"
 	"os"
 	"regexp"
@@ -268,12 +268,12 @@ func (lp *LanguageParser) extractStructuredLanguages() []Language {
 		if start < lastEnd {
 			continue // item aninhado em outro já extraído
 		}
-		block := balancedBlock(content, start, "div")
+		block := parser.BalancedBlock(content, start, "div")
 		lastEnd = start + len(block)
 
 		var texts []string
 		for _, match := range pRe.FindAllStringSubmatch(block, -1) {
-			if text := cleanText(match[1]); text != "" {
+			if text := parser.CleanText(match[1]); text != "" {
 				texts = append(texts, text)
 			}
 		}
@@ -295,29 +295,6 @@ func (lp *LanguageParser) extractStructuredLanguages() []Language {
 	}
 
 	return languages
-}
-
-// balancedBlock retorna o elemento <tag> que começa em start, até a tag de fechamento correspondente
-func balancedBlock(s string, start int, tag string) string {
-	re := regexp.MustCompile(`<` + tag + `\b|</` + tag + `>`)
-	depth := 0
-	for _, loc := range re.FindAllStringIndex(s[start:], -1) {
-		if s[start+loc[0]+1] == '/' {
-			depth--
-		} else {
-			depth++
-		}
-		if depth == 0 {
-			return s[start : start+loc[1]]
-		}
-	}
-	return s[start:]
-}
-
-func cleanText(s string) string {
-	s = html.UnescapeString(tagRe.ReplaceAllString(s, " "))
-	s = strings.ReplaceAll(s, "\u200b", "")
-	return strings.TrimSpace(spaceRe.ReplaceAllString(s, " "))
 }
 
 func (lp *LanguageParser) isValidLanguage(lang Language) bool {

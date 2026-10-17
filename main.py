@@ -292,7 +292,7 @@ DETAIL_SECTIONS = [
 
 def run_parser(parser, output_dir, name):
     """Roda o parser Go em background sobre <name>.html, gerando <name>.json"""
-    return subprocess.Popen([f"./{parser}", f"{output_dir}/{name}.html", f"{output_dir}/{name}.json"])
+    return subprocess.Popen([f"./enrichment/bin/{parser}", f"{output_dir}/{name}.html", f"{output_dir}/{name}.json"])
 
 
 # Exemplo de uso

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html"
+	"linkedin-enrichment/internal/parser"
 	"os"
 	"regexp"
 	"strings"
@@ -290,7 +291,7 @@ func extractHeadline(htmlContent string) string {
 		if len(matches) > 1 {
 			headline := strings.TrimSpace(matches[len(matches)-1])
 			if len(headline) > 20 && len(headline) < 300 {
-				return cleanHTML(headline)
+				return parser.CleanText(headline)
 			}
 		}
 	}
@@ -299,7 +300,7 @@ func extractHeadline(htmlContent string) string {
 	re := regexp.MustCompile(`>([^<]*\|[^<]*\|[^<]*)</p>`)
 	matches := re.FindStringSubmatch(htmlContent)
 	if len(matches) > 1 {
-		return cleanHTML(strings.TrimSpace(matches[1]))
+		return parser.CleanText(strings.TrimSpace(matches[1]))
 	}
 
 	return ""
@@ -323,7 +324,7 @@ func extractDescription(htmlContent string) string {
 	if len(matches) > 1 {
 		desc := matches[1]
 		// Limpar HTML
-		desc = cleanHTML(desc)
+		desc = parser.CleanText(desc)
 		// Converter quebras de linha
 		desc = strings.ReplaceAll(desc, "\n", "<br><br>")
 		// Remover <br><br> repetidos
@@ -343,7 +344,7 @@ func extractDescription(htmlContent string) string {
 		re := regexp.MustCompile(pattern)
 		matches := re.FindStringSubmatch(htmlContent)
 		if len(matches) > 1 {
-			return cleanHTML(matches[1])
+			return parser.CleanText(matches[1])
 		}
 	}
 
@@ -391,19 +392,4 @@ func extractPhones(htmlContent string) []string {
 	}
 
 	return phones
-}
-
-func cleanHTML(s string) string {
-	// Remove tags HTML
-	re := regexp.MustCompile(`<[^>]+>`)
-	s = re.ReplaceAllString(s, " ")
-
-	// Decodificar entidades HTML
-	s = html.UnescapeString(s)
-
-	// Limpar espaços extras
-	re = regexp.MustCompile(`\s+`)
-	s = re.ReplaceAllString(s, " ")
-
-	return strings.TrimSpace(s)
 }

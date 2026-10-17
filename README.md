@@ -59,17 +59,10 @@ pip install selenium requests pywebcopy
 ### 2. Compilar os parsers Go
 
 ```bash
-# Parser de perfil
-go build -o linkedin-parser main.go
-
-# Parser de experiências
-go build -o experience-parser experience_parser.go
-
-# Parser de formação acadêmica
-go build -o education-parser education_parser.go
-
-# Parser de idiomas
-go build -o language-parser language_parser.go
+cd enrichment
+for p in linkedin-parser experience-parser education-parser language-parser; do
+  go build -o bin/$p ./cmd/$p
+done
 ```
 
 ### 3. Configurar ChromeDriver
@@ -121,16 +114,16 @@ python linkedin.py https://www.linkedin.com/in/username/
 
 ```bash
 # Parser de perfil
-./linkedin-parser input.html output.json
+./enrichment/bin/linkedin-parser input.html output.json
 
 # Parser de experiências
-./experience-parser experience.html experiences.json
+./enrichment/bin/experience-parser experience.html experiences.json
 
 # Parser de formação
-./education-parser education.html education.json
+./enrichment/bin/education-parser education.html education.json
 
 # Parser de idiomas
-./language-parser languages.html languages.json
+./enrichment/bin/language-parser languages.html languages.json
 ```
 
 ## Estrutura de Dados
