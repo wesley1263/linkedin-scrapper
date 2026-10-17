@@ -11,6 +11,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
 from selenium.common.exceptions import TimeoutException, WebDriverException
 import observability as obs
+import bundle
 import time
 import tempfile
 import subprocess
@@ -363,6 +364,7 @@ def collect_profile(scraper, tab, base_url, output_dir):
     scraper.scroll_to_bottom()
     scraper.click_more_buttons(base_url)
     scraper.save_html("profile.html", output_dir)
+    return scraper.driver.current_url
 
 
 def collect_detail(scraper, tab, name, output_dir):
@@ -371,6 +373,7 @@ def collect_detail(scraper, tab, name, output_dir):
     scraper.wait_until_stable()
     scraper.load_all_content()
     scraper.save_html(f"{name}.html", output_dir)
+    return scraper.driver.current_url
 
 
 def process_section(scraper, name, collect, parser, output_dir):
@@ -380,8 +383,9 @@ def process_section(scraper, name, collect, parser, output_dir):
     """
     extra = {"section": name}
     start = time.time()
+    final_url = None
     try:
-        collect()
+        final_url = collect()
     except ProfileNotFound:
         raise
     except (WebDriverException, OSError) as e:
@@ -392,6 +396,7 @@ def process_section(scraper, name, collect, parser, output_dir):
         result = obs.run_parser(f"./enrichment/bin/{parser}", f"{output_dir}/{name}.html",
                                 f"{output_dir}/{name}.json", name)
 
+    result.final_url = final_url
     result.duration_ms = int((time.time() - start) * 1000)
     extra["duration_ms"] = result.duration_ms
     if result.ok:
@@ -400,6 +405,24 @@ def process_section(scraper, name, collect, parser, output_dir):
         log.error("Seção %s falhou: %s", name, result.error or result.parse_status, extra=extra)
         scraper.save_failure_artifacts(f"{output_dir}/failures", name)
     return result
+
+
+def write_collection_bundle(job_id, base_url, dir_name, output_dir, collected_at, results):
+    """Empacota os HTMLs coletados + manifest.json em output/raw/<perfil>/<collected_at>.zip (ADR-0010)."""
+    expected = {"profile": base_url, **{name: f"{base_url}{path}" for name, path, _ in DETAIL_SECTIONS}}
+    sections = {
+        r.section: (f"{r.section}.html", bundle.section_status(r, expected[r.section]), r.final_url)
+        for r in results
+    }
+    if not any(status in (bundle.OK, bundle.REDIRECTED) for _, status, _ in sections.values()):
+        log.warning("Nenhum HTML coletado: zip não gerado")
+        return
+    manifest = bundle.build_manifest(job_id, os.getenv("LINKEDIN_ACCOUNT_ID"), base_url, collected_at, sections)
+    try:
+        path = bundle.write_bundle(f"./output/raw/{dir_name}", output_dir, manifest)
+        log.info("Zip da coleta: %s", path)
+    except (OSError, ValueError):
+        log.exception("Não foi possível gerar o zip da coleta")
 
 
 # Uso: python main.py [--visible] [<profile_url>]
@@ -468,6 +491,8 @@ if __name__ == "__main__":
     status = obs.job_status(results, auth_ok=auth_ok, found=found)
     duration_ms = int((time.time() - start_time) * 1000)
     obs.write_status_json(f"{output_dir}/status.json", job_id, base_url, status, results, started_at, duration_ms)
+    if auth_ok and found:
+        write_collection_bundle(job_id, base_url, dir_name, output_dir, started_at, results)
     log.info("Job finalizado: %s em %.1fs (detalhes em %s/status.json)", status, duration_ms / 1000, output_dir,
              extra={"duration_ms": duration_ms})
     sys.exit(obs.exit_code(status))
