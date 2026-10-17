@@ -147,7 +147,16 @@ class LinkedInScraper:
             return True
             
         except Exception as e:
-            print(f"Erro no login: {str(e)}")
+            print(f"Erro no login ({type(e).__name__}): {str(e).splitlines()[0] if str(e) else 'sem mensagem'}")
+            try:
+                print(f"  URL atual: {self.driver.current_url} | título: {self.driver.title!r}")
+                os.makedirs("output", exist_ok=True)
+                self.driver.save_screenshot("output/login_error.png")
+                print("  Screenshot salvo em output/login_error.png")
+            except Exception:
+                pass
+            if self.headless:
+                print("  Dica: rode com --visible para ver a página e resolver login/verificação manualmente")
             return False
 
     def scroll_to_bottom(self):
