@@ -283,38 +283,47 @@ class LinkedInScraper:
         print(f"Load more clicado {clicks} vezes")
         return clicks
     
-    def click_more_buttons(self, page_url=None):
-        """Clica nos botões 'more' para expandir textos truncados.
+    # Acha o título da seção About/Sobre e sobe na árvore até o menor ancestral que tenha um botão
+    # "more"/"mais"; clica só nesse botão. Retorna o texto do botão clicado ou None.
+    CLICK_ABOUT_MORE_JS = """
+    const titles = ['about', 'sobre', 'acerca de', 'info'];
+    const heading = [...document.querySelectorAll('h1, h2, h3, p, span')].find(
+        e => e.children.length === 0 && titles.includes(e.textContent.trim().toLowerCase())
+             && e.offsetParent !== null && !e.closest('header, nav, footer')
+    );
+    if (!heading) return null;
+    let node = heading;
+    for (let i = 0; i < 8 && node.parentElement; i++) {
+        node = node.parentElement;
+        const btn = [...node.querySelectorAll('button')].find(b => /^\\W*(more|mais)\\b/i.test(b.textContent.trim())
+                                                              || /\\b(more|mais)$/i.test(b.textContent.trim()));
+        if (btn) {
+            btn.scrollIntoView({block: 'center'});
+            btn.click();
+            return btn.textContent.trim();
+        }
+    }
+    return null;
+    """
 
-        Se algum clique navegar para fora da página (ex.: "...more" de um post da atividade abre o
-        post), volta para page_url e segue sem aquele botão, para não salvar o HTML da página errada.
-        """
-        # Botões já tratados recebem um atributo, pois os expandidos somem e os índices mudam
-        xpath = "//button[.//span[contains(text(), 'more')]][not(@data-scraper-done)]"
-        clicked = 0
+    def click_more_buttons(self, page_url=None):
+        """Expande só o texto da seção About ("…more"), sem tocar nos outros botões "more" da página
+        (posts da atividade, por exemplo, navegam para fora do perfil). Retorna 1 se clicou, 0 se não."""
         try:
-            while True:
-                buttons = self.driver.find_elements(By.XPATH, xpath)
-                if not buttons:
-                    break
-                button = buttons[0]
-                try:
-                    self.driver.execute_script(
-                        "arguments[0].setAttribute('data-scraper-done', '1'); arguments[0].click();", button
-                    )
-                except Exception:
-                    continue
-                clicked += 1
-                if page_url and self.driver.current_url.split("?")[0].rstrip("/") != page_url.split("?")[0].rstrip("/"):
-                    print(f"  Clique em 'more' navegou para {self.driver.current_url}; voltando ao perfil")
-                    self.driver.get(page_url)
-                    self.wait_until_stable()
-                    self.scroll_to_bottom()
-            if clicked:
-                self.wait_until_stable(timeout=5, quiet=0.5)
-        except Exception:
-            pass
-        return clicked
+            label = self.driver.execute_script(self.CLICK_ABOUT_MORE_JS)
+        except Exception as e:
+            print(f"  Falha ao expandir About: {type(e).__name__}")
+            return 0
+        if not label:
+            print("  Botão 'more' do About não encontrado (texto já completo ou seção ausente)")
+            return 0
+        print(f"  About expandido (botão: {label!r})")
+        self.wait_until_stable(timeout=5, quiet=0.5)
+        if page_url and self.driver.current_url.split("?")[0].rstrip("/") != page_url.split("?")[0].rstrip("/"):
+            print(f"  Navegou para {self.driver.current_url}; voltando ao perfil")
+            self.driver.get(page_url)
+            self.wait_until_stable()
+        return 1
 
 # (arquivo, path relativo ao perfil, binário do parser)
 DETAIL_SECTIONS = [
