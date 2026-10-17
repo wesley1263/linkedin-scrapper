@@ -346,8 +346,8 @@ class LinkedInScraper:
             self.wait_until_stable()
         return 1
 
-# Onde ficam os binários dos parsers Go; após a separação dos repositórios (ADR-0013) vêm do linkedin-enrichment
-PARSER_BIN_DIR = os.getenv("PARSER_BIN_DIR", "./enrichment/bin")
+# Onde ficam os binários dos parsers Go (repositório linkedin-enrichment, clonado ao lado; ADR-0013)
+PARSER_BIN_DIR = os.getenv("PARSER_BIN_DIR", "../linkedin-enrichment/bin")
 
 # (arquivo, path relativo ao perfil, binário do parser)
 DETAIL_SECTIONS = [

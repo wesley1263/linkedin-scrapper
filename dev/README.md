@@ -1,6 +1,3 @@
-# linkedin-enrichment-dev
+# dev
 
-Ambiente integrado e contrato compartilhado entre os serviços (ADR-0013).
-
-- `docker-compose.yml`: infraestrutura local (Postgres, MinIO, RabbitMQ, Vault dev). `docker compose up -d`.
-- `schemas/manifest.v1.schema.json`: schema do `manifest.json` do zip de coleta (ADR-0010), validado no CI do coletor e do enrichment.
+`docker-compose.yml`: infraestrutura local que imita a nuvem (Postgres, MinIO ≈ S3, RabbitMQ ≈ SQS, Vault dev ≈ KMS), ADR-0013. `docker compose up -d`. Os serviços de aplicação entram quando tiverem Dockerfile e drivers de fila/storage (ADR-0014).

@@ -11,6 +11,14 @@ e os parsers Go como arquivos `package main` soltos, sem `go.mod`. O sistema com
 infraestrutura (Postgres, storage de objetos, fila, KMS) que precisam subir juntas para desenvolver e testar o fluxo
 de ponta a ponta.
 
+## Ajuste (2026-10-17)
+
+O repositório `linkedin-enrichment-dev` foi **adiado**: com só dois serviços, um terceiro repositório para um compose e
+um schema JSON é custo sem ganho. Por ora o compose de infra fica em `dev/` do coletor e o schema do manifest em
+`schemas/` do coletor; o `linkedin-enrichment` terá uma cópia do schema, com teste que a compare, quando passar a ler o
+zip. O repositório `-dev` volta a fazer sentido quando houver Dockerfiles dos serviços e o compose integrado rodar de
+verdade. O restante da decisão abaixo continua valendo.
+
 ## Decisão
 
 ### Um repositório por serviço
