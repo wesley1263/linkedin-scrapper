@@ -7,6 +7,5 @@ output/
 resumes/
 
 # Binários dos parsers Go
-/enrichment/bin/
 
 __pycache__/

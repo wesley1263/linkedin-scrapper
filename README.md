@@ -59,7 +59,8 @@ pip install selenium requests pywebcopy
 ### 2. Compilar os parsers Go
 
 ```bash
-cd enrichment
+git clone <url>/linkedin-enrichment ../linkedin-enrichment
+cd ../linkedin-enrichment
 for p in linkedin-parser experience-parser education-parser language-parser; do
   go build -o bin/$p ./cmd/$p
 done
@@ -114,16 +115,16 @@ python linkedin.py https://www.linkedin.com/in/username/
 
 ```bash
 # Parser de perfil
-./enrichment/bin/linkedin-parser input.html output.json
+../linkedin-enrichment/bin/linkedin-parser input.html output.json
 
 # Parser de experiências
-./enrichment/bin/experience-parser experience.html experiences.json
+../linkedin-enrichment/bin/experience-parser experience.html experiences.json
 
 # Parser de formação
-./enrichment/bin/education-parser education.html education.json
+../linkedin-enrichment/bin/education-parser education.html education.json
 
 # Parser de idiomas
-./enrichment/bin/language-parser languages.html languages.json
+../linkedin-enrichment/bin/language-parser languages.html languages.json
 ```
 
 ## Estrutura de Dados
@@ -230,7 +231,7 @@ output/raw/<username>/<collected_at>.zip   # HTMLs brutos + manifest.json (imut�
 
 ### Zip da coleta e manifest
 
-Cada coleta gera um zip em `output/raw/<username>/<collected_at>.zip` (ex.: `20261015T140211Z.zip`) com os HTMLs e um `manifest.json` na raiz, que é o contrato entre a coleta e os parsers (ADR-0010; schema em `dev/schemas/manifest.v1.schema.json`). Cada seção tem `status` `ok`, `redirected` (com `final_url`), `timeout` ou `not_collected`; só `ok` e `redirected` trazem o arquivo. O manifest nunca contém sessão, cookies ou credenciais. `LINKEDIN_ACCOUNT_ID` (opcional) preenche `account_id`.
+Cada coleta gera um zip em `output/raw/<username>/<collected_at>.zip` (ex.: `20261015T140211Z.zip`) com os HTMLs e um `manifest.json` na raiz, que é o contrato entre a coleta e os parsers (ADR-0010; schema em `schemas/manifest.v1.schema.json`). Cada seção tem `status` `ok`, `redirected` (com `final_url`), `timeout` ou `not_collected`; só `ok` e `redirected` trazem o arquivo. O manifest nunca contém sessão, cookies ou credenciais. `LINKEDIN_ACCOUNT_ID` (opcional) preenche `account_id`.
 
 ### Status e logs
 
