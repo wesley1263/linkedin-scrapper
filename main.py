@@ -121,18 +121,18 @@ class LinkedInScraper:
                 print("Sessão do perfil do Chrome já ativa")
                 return True
 
-            # O LinkedIn trocou os ids (#username/#password) no layout novo; aceita os dois formatos
+            # O layout novo não tem mais #username/#password (ids aleatórios) e renderiza o formulário
+            # duas vezes, uma oculta: usa sempre o primeiro campo visível
+            def first_visible(css):
+                return lambda d: next((e for e in d.find_elements(By.CSS_SELECTOR, css) if e.is_displayed()), False)
+
             email_field = WebDriverWait(self.driver, 10).until(
-                EC.visibility_of_element_located((
-                    By.CSS_SELECTOR,
-                    "#username, input[name='session_key'], input[autocomplete~='username'], input[type='email']",
-                ))
+                first_visible("#username, input[name='session_key'], input[autocomplete~='username'], input[type='email']")
             )
             email_field.send_keys(email)
 
-            password_field = self.driver.find_element(
-                By.CSS_SELECTOR,
-                "#password, input[name='session_password'], input[type='password']",
+            password_field = WebDriverWait(self.driver, 5).until(
+                first_visible("#password, input[name='session_password'], input[type='password']")
             )
             password_field.send_keys(password)
 
