@@ -23,7 +23,8 @@ class LinkedInScraper:
         """Configura o driver do Chrome com opções anti-detecção"""
         options = Options()
         # Perfil persistente
-        options.add_argument("--user-data-dir=/home/weslei/.linkedin_chrome_profile")
+        profile_dir = os.path.expanduser(os.environ.get("CHROME_PROFILE_DIR", "~/.linkedin_chrome_profile"))
+        options.add_argument(f"--user-data-dir={profile_dir}")
         if self.headless:
             options.add_argument("--headless=new")
             # Sem tamanho explícito o headless abre em 800x600 e o LinkedIn pode servir layout mobile

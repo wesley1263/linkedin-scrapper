@@ -30,7 +30,7 @@ Não há testes nem lint configurados. Para validar mudança em um parser, recom
 
 ## Arquitetura
 
-- **`main.py`** (`LinkedInScraper`): reutiliza primeiro a sessão do perfil persistente do Chrome (`--user-data-dir` com caminho absoluto fixo em `/home/weslei/...`), depois `linkedin_cookies.json`, e só faz login com usuário/senha se ambos falharem. Login é detectado pela URL (`/feed`), não por classes CSS.
+- **`main.py`** (`LinkedInScraper`): reutiliza primeiro a sessão do perfil persistente do Chrome (`--user-data-dir`, por padrão `~/.linkedin_chrome_profile`; sobrescreva com `CHROME_PROFILE_DIR`), depois `linkedin_cookies.json`, e só faz login com usuário/senha se ambos falharem. Login é detectado pela URL (`/feed`), não por classes CSS.
   - Fluxo: abre as seções de detalhe (`DETAIL_SECTIONS`) em abas via `window.open` para carregarem em paralelo, carrega o perfil na aba principal e depois visita cada aba para expandir conteúdo (scroll / "Load more" / "more") e gravar `output/<username>/<secao>.html`. Cada parser Go roda em background (`subprocess.Popen`) assim que o HTML é salvo; os binários precisam estar compilados em `enrichment/bin/` e o script rodar a partir da raiz.
   - Sem `time.sleep` fixos: as esperas usam `wait_until_stable()` (DOM sem mudar de tamanho por um intervalo). Ao mexer em scroll/expansão, manter esse padrão.
   - Mapeamento seção → URL → binário: perfil (`<url>`) → `linkedin-parser`; `details/experience/` → `experience-parser`; `details/education/` → `education-parser`; `details/languages/` → `language-parser`.
