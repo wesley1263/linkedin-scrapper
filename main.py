@@ -121,20 +121,24 @@ class LinkedInScraper:
                 print("Sessão do perfil do Chrome já ativa")
                 return True
 
-            # Aguarda e preenche email
+            # O LinkedIn trocou os ids (#username/#password) no layout novo; aceita os dois formatos
             email_field = WebDriverWait(self.driver, 10).until(
-                EC.presence_of_element_located((By.ID, "username"))
+                EC.visibility_of_element_located((
+                    By.CSS_SELECTOR,
+                    "#username, input[name='session_key'], input[autocomplete~='username'], input[type='email']",
+                ))
             )
             email_field.send_keys(email)
-            
-            # Preenche senha
-            password_field = self.driver.find_element(By.ID, "password")
+
+            password_field = self.driver.find_element(
+                By.CSS_SELECTOR,
+                "#password, input[name='session_password'], input[type='password']",
+            )
             password_field.send_keys(password)
-            
-            # Clica no botão de login
-            login_button = self.driver.find_element(By.XPATH, "//button[@type='submit']")
-            login_button.click()
-            
+
+            # Enter no campo de senha envia o formulário sem depender do markup do botão
+            password_field.send_keys(Keys.RETURN)
+
             # Aguarda chegar no feed; se cair em checkpoint (2FA/captcha), dá tempo de resolver manualmente
             WebDriverWait(self.driver, 15).until(
                 lambda d: "/feed" in d.current_url or "/checkpoint" in d.current_url
