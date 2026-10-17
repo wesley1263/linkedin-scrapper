@@ -1,3 +1,4 @@
+import io
 import json
 import os
 import tempfile
@@ -67,9 +68,9 @@ class ManifestTest(unittest.TestCase):
             self.assertNotIn(word, text)
 
 
-class WriteBundleTest(unittest.TestCase):
+class BuildZipTest(unittest.TestCase):
     def test_zip_has_manifest_and_only_collected_html(self):
-        with tempfile.TemporaryDirectory() as src, tempfile.TemporaryDirectory() as raw:
+        with tempfile.TemporaryDirectory() as src:
             for name in ("profile.html", "education.html"):
                 with open(os.path.join(src, name), "w") as f:
                     f.write("<html>" + name + "</html>")
@@ -77,26 +78,21 @@ class WriteBundleTest(unittest.TestCase):
                 "profile": ("profile.html", "ok", URL),
                 "education": ("education.html", "timeout", None),  # HTML parcial no disco não entra no zip
             })
-            path = bundle.write_bundle(os.path.join(raw, "fulano"), src, m)
-            self.assertTrue(path.endswith("20261015T140211Z.zip"))
-            with zipfile.ZipFile(path) as zf:
+            with zipfile.ZipFile(io.BytesIO(bundle.build_zip(src, m))) as zf:
                 self.assertEqual(sorted(zf.namelist()), ["manifest.json", "profile.html"])
                 self.assertEqual(json.loads(zf.read("manifest.json"))["account_id"], "acc1")
                 self.assertEqual(zf.read("profile.html"), b"<html>profile.html</html>")
 
-    def test_never_overwrites(self):
-        with tempfile.TemporaryDirectory() as src, tempfile.TemporaryDirectory() as raw:
-            with open(os.path.join(src, "profile.html"), "w") as f:
-                f.write("x")
-            m = bundle.build_manifest("abc", None, URL, WHEN, {"profile": ("profile.html", "ok", URL)})
-            bundle.write_bundle(raw, src, m)
-            with self.assertRaises(FileExistsError):
-                bundle.write_bundle(raw, src, m)
-
     def test_invalid_manifest_is_refused(self):
-        with tempfile.TemporaryDirectory() as d:
-            with self.assertRaises(ValueError):
-                bundle.write_bundle(d, d, {"schema_version": 9})
+        with self.assertRaises(ValueError):
+            bundle.build_zip(".", {"schema_version": 9})
+
+    def test_key_and_parse_message_are_small(self):
+        m = bundle.build_manifest("abc", None, URL, WHEN, {"profile": ("profile.html", "ok", URL)})
+        key = bundle.bundle_key("fulano", m)
+        self.assertEqual(key, "raw/fulano/20261015T140211Z.zip")
+        msg = json.loads(bundle.parse_message(m, key))
+        self.assertEqual(msg, {"schema_version": 1, "job_id": "abc", "linkedin_url": URL, "zip_key": key})
 
 
 if __name__ == "__main__":

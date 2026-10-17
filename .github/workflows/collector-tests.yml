@@ -2,9 +2,9 @@ name: collector-tests
 
 on:
   push:
-    paths: ["observability.py", "bundle.py", "tests/**", ".github/workflows/collector-tests.yml"]
+    paths: ["observability.py", "bundle.py", "infra/**", "tests/**", ".github/workflows/collector-tests.yml"]
   pull_request:
-    paths: ["observability.py", "bundle.py", "tests/**", ".github/workflows/collector-tests.yml"]
+    paths: ["observability.py", "bundle.py", "infra/**", "tests/**", ".github/workflows/collector-tests.yml"]
 
 jobs:
   test:

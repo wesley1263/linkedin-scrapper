@@ -12,6 +12,7 @@ from selenium.webdriver.chrome.options import Options
 from selenium.common.exceptions import TimeoutException, WebDriverException
 import observability as obs
 import bundle
+import infra
 import time
 import tempfile
 import subprocess
@@ -411,7 +412,7 @@ def process_section(scraper, name, collect, parser, output_dir):
 
 
 def write_collection_bundle(job_id, base_url, dir_name, output_dir, collected_at, results):
-    """Empacota os HTMLs coletados + manifest.json em output/raw/<perfil>/<collected_at>.zip (ADR-0010)."""
+    """Empacota os HTMLs + manifest.json (ADR-0010), grava no storage (ADR-0014) e publica no tópico `parse` se há fila."""
     expected = {"profile": base_url, **{name: f"{base_url}{path}" for name, path, _ in DETAIL_SECTIONS}}
     sections = {
         r.section: (f"{r.section}.html", bundle.section_status(r, expected[r.section]), r.final_url)
@@ -422,10 +423,15 @@ def write_collection_bundle(job_id, base_url, dir_name, output_dir, collected_at
         return
     manifest = bundle.build_manifest(job_id, os.getenv("LINKEDIN_ACCOUNT_ID"), base_url, collected_at, sections)
     try:
-        path = bundle.write_bundle(f"./output/raw/{dir_name}", output_dir, manifest)
-        log.info("Zip da coleta: %s", path)
+        key = bundle.bundle_key(dir_name, manifest)
+        infra.new_storage().put(key, bundle.build_zip(output_dir, manifest))
+        log.info("Zip da coleta gravado: %s", key)
+        queue = infra.new_queue()
+        if queue:
+            queue.publish("parse", bundle.parse_message(manifest, key))
+            log.info("Publicado em parse: %s", key)
     except (OSError, ValueError):
-        log.exception("Não foi possível gerar o zip da coleta")
+        log.exception("Não foi possível gravar/publicar o zip da coleta")
 
 
 # Uso: python main.py [--visible] [<profile_url>]
