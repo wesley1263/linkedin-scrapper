@@ -30,6 +30,8 @@ go test ./... -update                  # regrava os *.golden.json (conferir o di
 python3 tools/anonymize_fixture.py <output/user/secao.html> cmd/<parser>/testdata/<secao>.html --name "Nome Real" [--sub "real=>falso"]
 ```
 
+O CI (`.github/workflows/enrichment-tests.yml`) roda `gofmt`, `go vet` e `go test ./...` em `enrichment/` a cada push/PR que o toque.
+
 Fixtures em `cmd/<parser>/testdata/` são HTML **anonimizado** (o script recorta só a lista de itens e troca nomes, empresas, URLs e textos); nunca commitar HTML bruto de `output/`. Depois de gerar, conferir com `grep -i` por nomes reais — o script não pega tudo (ex.: títulos de mídia, locais com texto livre; use `--sub`). Para validar contra um HTML real, recompile e rode:
 
 ```bash
