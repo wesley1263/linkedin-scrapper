@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"html"
 	"linkedin-enrichment/internal/parser"
@@ -34,43 +33,6 @@ type Address struct {
 	Region       string `json:"region"`
 	Neighborhood string `json:"neighborhood"`
 	Locality     string `json:"locality"`
-}
-
-func main() {
-	if len(os.Args) < 2 {
-		fmt.Println("Uso: linkedin-parser <arquivo.html> [output.json]")
-		os.Exit(1)
-	}
-
-	inputFile := os.Args[1]
-	outputFile := "profile.json"
-	if len(os.Args) >= 3 {
-		outputFile = os.Args[2]
-	}
-
-	content, err := os.ReadFile(inputFile)
-	if err != nil {
-		fmt.Printf("Erro ao ler arquivo: %v\n", err)
-		os.Exit(1)
-	}
-
-	htmlContent := string(content)
-	profile := parseProfile(htmlContent)
-
-	jsonData, err := json.MarshalIndent(profile, "", "  ")
-	if err != nil {
-		fmt.Printf("Erro ao gerar JSON: %v\n", err)
-		os.Exit(1)
-	}
-
-	err = os.WriteFile(outputFile, jsonData, 0644)
-	if err != nil {
-		fmt.Printf("Erro ao salvar arquivo: %v\n", err)
-		os.Exit(1)
-	}
-
-	fmt.Printf("Perfil extraído com sucesso: %s\n", outputFile)
-
 }
 
 // Marcadores do layout atual (SDUI) da página de perfil
@@ -300,4 +262,21 @@ func extractPhones(htmlContent string) []string {
 	}
 
 	return phones
+}
+
+func main() {
+	os.Exit(parser.RunSection(parser.Spec{
+		Section:       "profile",
+		DefaultOutput: "profile.json",
+		// O perfil nunca é "vazio": sem nome e URL o layout mudou ou a página não é um perfil
+		AllowEmpty: false,
+		Parse: func(htmlContent string) (any, int) {
+			profile := parseProfile(htmlContent)
+			items := 0
+			if profile.FirstName != "" && profile.LinkedInURL != "" {
+				items = 1
+			}
+			return profile, items
+		},
+	}, os.Args[1:], os.Stdout, os.Stderr))
 }

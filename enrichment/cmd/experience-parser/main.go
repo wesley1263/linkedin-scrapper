@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"html"
 	"linkedin-enrichment/internal/parser"
@@ -41,42 +40,6 @@ type Salary struct {
 type Company struct {
 	CorporationID string `json:"corporation_id"`
 	Name          string `json:"name"`
-}
-
-func main() {
-	if len(os.Args) < 2 {
-		fmt.Println("Uso: experience-parser <arquivo.html> [output.json]")
-		os.Exit(1)
-	}
-
-	inputFile := os.Args[1]
-	outputFile := "experiences.json"
-	if len(os.Args) >= 3 {
-		outputFile = os.Args[2]
-	}
-
-	content, err := os.ReadFile(inputFile)
-	if err != nil {
-		fmt.Printf("Erro ao ler arquivo: %v\n", err)
-		os.Exit(1)
-	}
-
-	htmlContent := string(content)
-	experiences := parseExperiences(htmlContent)
-
-	jsonData, err := json.MarshalIndent(experiences, "", "  ")
-	if err != nil {
-		fmt.Printf("Erro ao gerar JSON: %v\n", err)
-		os.Exit(1)
-	}
-
-	err = os.WriteFile(outputFile, jsonData, 0644)
-	if err != nil {
-		fmt.Printf("Erro ao salvar arquivo: %v\n", err)
-		os.Exit(1)
-	}
-
-	fmt.Printf("Experiências extraídas com sucesso: %s (%d experiências)\n", outputFile, len(experiences))
 }
 
 var (
@@ -333,4 +296,19 @@ func extractDescription(block string) string {
 		}
 	}
 	return strings.Join(lines, "\n")
+}
+
+func main() {
+	os.Exit(parser.RunSection(parser.Spec{
+		Section:       "experience",
+		DefaultOutput: "experiences.json",
+		AllowEmpty:    true,
+		Parse: func(htmlContent string) (any, int) {
+			experiences := parseExperiences(htmlContent)
+			if experiences == nil {
+				experiences = []Experience{}
+			}
+			return experiences, len(experiences)
+		},
+	}, os.Args[1:], os.Stdout, os.Stderr))
 }

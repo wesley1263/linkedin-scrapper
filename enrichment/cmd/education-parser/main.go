@@ -1,12 +1,9 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"html"
-	"io/ioutil"
 	"linkedin-enrichment/internal/parser"
-	"log"
 	"os"
 	"regexp"
 	"strings"
@@ -262,62 +259,17 @@ func formatDate(month, year string, defaultMonth int, endOfMonth bool) string {
 	return t.Format("2006-01-02")
 }
 
-// processHTMLFile processa um arquivo HTML e retorna dados de educação
-func processHTMLFile(filename string) ([]Education, error) {
-	content, err := ioutil.ReadFile(filename)
-	if err != nil {
-		return nil, fmt.Errorf("erro ao ler arquivo %s: %v", filename, err)
-	}
-
-	parser := NewEducationParser(string(content))
-	educations := parser.extractEducationData()
-	if educations == nil {
-		educations = []Education{}
-	}
-
-	return educations, nil
-}
-
-// saveToJSON salva os dados em formato JSON
-func saveToJSON(educations []Education, filename string) error {
-	jsonData, err := json.MarshalIndent(educations, "", "  ")
-	if err != nil {
-		return fmt.Errorf("erro ao converter para JSON: %v", err)
-	}
-
-	err = ioutil.WriteFile(filename, jsonData, 0644)
-	if err != nil {
-		return fmt.Errorf("erro ao salvar arquivo %s: %v", filename, err)
-	}
-
-	return nil
-}
-
 func main() {
-	if len(os.Args) < 2 {
-		log.Fatal("Uso: go run main.go <arquivo_html> [arquivo_saida.json]")
-	}
-
-	inputFile := os.Args[1]
-	outputFile := "education.json"
-
-	if len(os.Args) >= 3 {
-		outputFile = os.Args[2]
-	}
-
-	fmt.Printf("Processando arquivo: %s\n", inputFile)
-
-	educations, err := processHTMLFile(inputFile)
-	if err != nil {
-		log.Fatalf("Erro ao processar arquivo: %v", err)
-	}
-
-	fmt.Printf("Encontrados %d registros de educação\n", len(educations))
-
-	err = saveToJSON(educations, outputFile)
-	if err != nil {
-		log.Fatalf("Erro ao salvar JSON: %v", err)
-	}
-
-	fmt.Printf("Dados salvos em: %s\n", outputFile)
+	os.Exit(parser.RunSection(parser.Spec{
+		Section:       "education",
+		DefaultOutput: "education.json",
+		AllowEmpty:    true,
+		Parse: func(htmlContent string) (any, int) {
+			educations := NewEducationParser(htmlContent).extractEducationData()
+			if educations == nil {
+				educations = []Education{}
+			}
+			return educations, len(educations)
+		},
+	}, os.Args[1:], os.Stdout, os.Stderr))
 }

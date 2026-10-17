@@ -222,8 +222,22 @@ output/
     ├── profile.json
     ├── experience.json
     ├── education.json
-    └── languages.json
+    ├── languages.json
+    ├── status.json          # status do job e de cada seção
+    └── failures/            # screenshot e HTML das seções que falharam
 ```
+
+### Status e logs
+
+Um perfil incompleto não passa mais por completo. Cada seção termina com um status de coleta (`collect_status`: `ok`/`failed`) e de parsing (`parse_status`):
+
+- `ok`: itens extraídos;
+- `empty`: o perfil não tem a seção ("Nothing to see for now");
+- `failed`: nenhum item extraído sem a marca de seção vazia (possível mudança de layout) ou erro de coleta.
+
+O job fica em `output/<username>/status.json` como `success`, `partial`, `failed`, `auth_required` ou `not_found`, e o `main.py` sai com código `0` (success), `2` (partial) ou `1` (demais). Cada parser imprime uma linha JSON de status no stdout (`{"section":"experience","status":"ok","items":4,...}`) e sai com `3` quando a seção falha.
+
+Os logs saem legíveis no terminal; use `LOG_FORMAT=json` para uma linha JSON por evento (com `job_id`, `profile`, `section`, `duration_ms`) e `LOG_LEVEL=DEBUG` para mais detalhe.
 
 ## Recursos de Anti-detecção
 

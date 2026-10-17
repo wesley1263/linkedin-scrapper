@@ -1,0 +1,18 @@
+name: collector-tests
+
+on:
+  push:
+    paths: ["observability.py", "tests/**", ".github/workflows/collector-tests.yml"]
+  pull_request:
+    paths: ["observability.py", "tests/**", ".github/workflows/collector-tests.yml"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # observability.py e seus testes só usam a stdlib: não precisa instalar Selenium
+      - run: python -m unittest discover -s tests -t .
