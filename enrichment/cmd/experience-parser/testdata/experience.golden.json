@@ -1,0 +1,98 @@
+[
+  {
+    "person_id": "",
+    "role_name": "CEO \u0026 Founder",
+    "start_date": "2023-03-01T00:00:00.000Z",
+    "is_current": true,
+    "end_date": null,
+    "description": "",
+    "job_location": "Belo Horizonte, Minas Gerais, Brazil",
+    "salary": {
+      "amount": 0,
+      "contract_type": "",
+      "currency": "BRL",
+      "payment_frequency": ""
+    },
+    "incentive_compensation": "",
+    "conditions": "",
+    "realizations": [],
+    "linkedin_url": "https://www.linkedin.com/company/1000",
+    "avatar_url": "https://media.example.com/img/1/company-logo_100_100.png",
+    "company": {
+      "corporation_id": "",
+      "name": "Organização 1"
+    }
+  },
+  {
+    "person_id": "",
+    "role_name": "CEO \u0026 Founder",
+    "start_date": "2020-11-01T00:00:00.000Z",
+    "is_current": true,
+    "end_date": null,
+    "description": "",
+    "job_location": "",
+    "salary": {
+      "amount": 0,
+      "contract_type": "",
+      "currency": "BRL",
+      "payment_frequency": ""
+    },
+    "incentive_compensation": "",
+    "conditions": "",
+    "realizations": [],
+    "linkedin_url": "https://www.linkedin.com/company/1001",
+    "avatar_url": "https://media.example.com/img/3/company-logo_100_100.png",
+    "company": {
+      "corporation_id": "",
+      "name": "Organização 2"
+    }
+  },
+  {
+    "person_id": "",
+    "role_name": "CEO \u0026 Founder",
+    "start_date": "2009-01-01T00:00:00.000Z",
+    "is_current": true,
+    "end_date": null,
+    "description": "",
+    "job_location": "Belo Horizonte",
+    "salary": {
+      "amount": 0,
+      "contract_type": "",
+      "currency": "BRL",
+      "payment_frequency": ""
+    },
+    "incentive_compensation": "",
+    "conditions": "",
+    "realizations": [],
+    "linkedin_url": "https://www.linkedin.com/company/1002",
+    "avatar_url": "https://media.example.com/img/5/company-logo_100_100.png",
+    "company": {
+      "corporation_id": "",
+      "name": "Organização 3"
+    }
+  },
+  {
+    "person_id": "",
+    "role_name": "Hardware Analyst",
+    "start_date": "2008-03-01T00:00:00.000Z",
+    "is_current": false,
+    "end_date": "2009-06-30T00:00:00.000Z",
+    "description": "Linha de descrição de exemplo.",
+    "job_location": "Greater Belo Horizonte",
+    "salary": {
+      "amount": 0,
+      "contract_type": "",
+      "currency": "BRL",
+      "payment_frequency": ""
+    },
+    "incentive_compensation": "",
+    "conditions": "",
+    "realizations": [],
+    "linkedin_url": "",
+    "avatar_url": "",
+    "company": {
+      "corporation_id": "",
+      "name": "Organização 4"
+    }
+  }
+]

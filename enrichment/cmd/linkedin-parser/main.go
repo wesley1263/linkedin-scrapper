@@ -73,111 +73,104 @@ func main() {
 
 }
 
+// Marcadores do layout atual (SDUI) da página de perfil
+var (
+	// <div componentkey="ProfileVerificationTriggerRef-<slug>">...<h2>Nome</h2>: ancora o card do topo e dá o slug do perfil
+	nameBlockRe = regexp.MustCompile(`(?s)componentkey="ProfileVerificationTriggerRef-([^"]+)".*?<h2\b[^>]*>(.*?)</h2>`)
+	// <p>Cidade, Estado, País</p><p>·</p><p><a href=".../overlay/contact-info/">: localização, sempre antes do "Contact info"
+	locationRe  = regexp.MustCompile(`<p\b[^>]*>([^<]+)</p>\s*<p\b[^>]*>·</p>\s*<p\b[^>]*><a\b[^>]*contact-info`)
+	paragraphRe = regexp.MustCompile(`(?s)<p\b[^>]*>(.*?)</p>`)
+	// ícones company-accent/school-accent identificam a empresa e a universidade atuais; o <p> seguinte tem o nome
+	companyRe    = regexp.MustCompile(`(?s)id="company-accent-\d+".*?<p\b[^>]*>(.*?)</p>`)
+	universityRe = regexp.MustCompile(`(?s)id="school-accent-\d+".*?<p\b[^>]*>(.*?)</p>`)
+	moreSuffixRe = regexp.MustCompile(`\s*\+\s*\d+\s+(?:more|mais)$`)
+	titleRe      = regexp.MustCompile(`<title>([^|<]+)\s*\|\s*LinkedIn</title>`)
+	notifCountRe = regexp.MustCompile(`^\(\d+\+?\)\s*`)
+	// avatar: profile-displayphoto-scale_200_200 / -crop_800_800 (a URL termina em aspas ou espaço, pois vem em srcset)
+	avatarRe    = regexp.MustCompile(`https://[^"\s]*profile-displayphoto-[a-z]+_(\d+)_\d+[^"\s]*`)
+	aboutTextRe = regexp.MustCompile(`(?s)data-testid="expandable-text-box"[^>]*>(.*?)</span>`)
+)
+
 func parseProfile(htmlContent string) Profile {
 	profile := Profile{
 		EmailAddresses: []string{},
 		Phones:         []string{},
-		Address: Address{
-			Street:       "",
-			PostalCode:   "",
-			Region:       "",
-			Neighborhood: "",
-		},
 	}
 
-	// Extrair nome completo do título
-	profile.FirstName, profile.LastName = extractName(htmlContent)
+	// Só a região do perfil em si (card do topo + About); o resto da página tem atividade e outras pessoas
+	region := profileRegion(htmlContent)
+	card := topCard(region)
 
-	// Extrair LinkedIn URL (usa firstName para encontrar o perfil correto)
-	profile.LinkedInURL = extractLinkedInURL(htmlContent, profile.FirstName)
-
-	// Extrair localização
-	profile.Address = extractAddress(htmlContent)
-
-	// Extrair foto de perfil (maior resolução)
-	profile.AvatarURL = extractAvatarURL(htmlContent)
-
-	// Extrair headline
-	profile.Headline = extractHeadline(htmlContent)
-
-	// Extrair empresa e universidade
-	profile.Company, profile.University = extractCompanyAndUniversity(htmlContent)
-
-	// Extrair descrição/about
-	profile.Description = extractDescription(htmlContent)
-
-	// Extrair emails do texto
-	profile.EmailAddresses = extractEmails(htmlContent)
-
-	// Extrair telefones
-	profile.Phones = extractPhones(htmlContent)
+	profile.FirstName, profile.LastName = extractName(htmlContent, region)
+	profile.LinkedInURL = extractLinkedInURL(region)
+	profile.Address = extractAddress(card)
+	profile.AvatarURL = extractAvatarURL(card)
+	profile.Headline = extractHeadline(card)
+	profile.Company = firstGroup(companyRe, card, moreSuffixRe)
+	profile.University = firstGroup(universityRe, card, moreSuffixRe)
+	profile.Description = extractDescription(region)
+	profile.EmailAddresses = extractEmails(region)
+	profile.Phones = extractPhones(region)
 
 	return profile
 }
 
-func extractName(html string) (firstName, lastName string) {
-	// Padrão: <title>Nome Sobrenome | LinkedIn</title>
-	re := regexp.MustCompile(`<title>([^|<]+)\s*\|\s*LinkedIn</title>`)
-	matches := re.FindStringSubmatch(html)
-	if len(matches) > 1 {
-		fullName := strings.TrimSpace(matches[1])
-		// Remove o contador de notificações do título: "(26) Nome Sobrenome"
-		fullName = regexp.MustCompile(`^\(\d+\+?\)\s*`).ReplaceAllString(fullName, "")
-		parts := strings.SplitN(fullName, " ", 2)
-		firstName = parts[0]
-		if len(parts) > 1 {
-			lastName = parts[1]
+// profileRegion vai do início do <main> até o fim da seção About (ou, sem About, até logo após o card do topo)
+func profileRegion(htmlContent string) string {
+	start := strings.Index(htmlContent, "<main")
+	if start < 0 {
+		start = 0
+	}
+	rest := htmlContent[start:]
+
+	if i := strings.Index(rest, ">About</h2>"); i >= 0 {
+		if sec := strings.LastIndex(rest[:i], "<section"); sec >= 0 {
+			return rest[:sec] + parser.BalancedBlock(rest, sec, "section")
 		}
+	}
+	end := len(rest)
+	if i := strings.Index(rest, "contact-info"); i >= 0 && i+4000 < end {
+		end = i + 4000
+	}
+	return rest[:end]
+}
+
+// topCard devolve o trecho do início da região até o link "Contact info" (e os ícones de empresa/universidade que o seguem)
+func topCard(region string) string {
+	end := len(region)
+	if i := strings.Index(region, "contact-info"); i >= 0 {
+		end = i
+		// Empresa/universidade vêm logo depois do contact info; para antes do bloco de conexões/botões
+		if j := strings.Index(region[i:], "connections"); j >= 0 {
+			end = i + j
+		} else if i+4000 < len(region) {
+			end = i + 4000
+		}
+	}
+	return region[:end]
+}
+
+func extractName(htmlContent, region string) (firstName, lastName string) {
+	fullName := ""
+	if m := nameBlockRe.FindStringSubmatch(region); m != nil {
+		fullName = parser.CleanText(m[2])
+	} else if m := titleRe.FindStringSubmatch(htmlContent); m != nil {
+		// <title>(26) Nome Sobrenome | LinkedIn</title>: remove o contador de notificações
+		fullName = notifCountRe.ReplaceAllString(strings.TrimSpace(m[1]), "")
+	}
+	parts := strings.SplitN(fullName, " ", 2)
+	firstName = parts[0]
+	if len(parts) > 1 {
+		lastName = parts[1]
 	}
 	return
 }
 
-func extractLinkedInURL(htmlContent string, firstName string) string {
-	// Procura por linkedin.com/in/username - prioriza URLs que contêm parte do nome
-	re := regexp.MustCompile(`href="(https://www\.linkedin\.com/in/([^"/]+))/?"`)
-	matches := re.FindAllStringSubmatch(htmlContent, -1)
-
-	// Normaliza o primeiro nome para comparação
-	firstNameLower := strings.ToLower(firstName)
-	firstNameNorm := normalizeString(firstNameLower)
-
-	for _, match := range matches {
-		if len(match) > 2 {
-			username := strings.ToLower(match[2])
-			usernameNorm := normalizeString(username)
-
-			// Verifica se o username contém o primeiro nome
-			if strings.Contains(usernameNorm, firstNameNorm) {
-				url := match[1]
-				return decodeURL(url)
-			}
-		}
+func extractLinkedInURL(region string) string {
+	if m := nameBlockRe.FindStringSubmatch(region); m != nil {
+		return "https://www.linkedin.com/in/" + decodeURL(m[1])
 	}
-
-	// Fallback: retorna o primeiro URL encontrado
-	if len(matches) > 0 && len(matches[0]) > 1 {
-		return decodeURL(matches[0][1])
-	}
-
 	return ""
-}
-
-func normalizeString(s string) string {
-	replacer := strings.NewReplacer(
-		"á", "a", "à", "a", "ã", "a", "â", "a",
-		"é", "e", "è", "e", "ê", "e",
-		"í", "i", "ì", "i", "î", "i",
-		"ó", "o", "ò", "o", "õ", "o", "ô", "o",
-		"ú", "u", "ù", "u", "û", "u",
-		"ç", "c",
-		"%c3%a1", "a", "%c3%a0", "a", "%c3%a3", "a", "%c3%a2", "a",
-		"%c3%a9", "e", "%c3%a8", "e", "%c3%aa", "e",
-		"%c3%ad", "i", "%c3%ac", "i", "%c3%ae", "i",
-		"%c3%b3", "o", "%c3%b2", "o", "%c3%b5", "o", "%c3%b4", "o",
-		"%c3%ba", "u", "%c3%b9", "u", "%c3%bb", "u",
-		"%c3%a7", "c",
-	)
-	return replacer.Replace(strings.ToLower(s))
 }
 
 func decodeURL(url string) string {
@@ -198,156 +191,71 @@ func decodeURL(url string) string {
 	return replacer.Replace(url)
 }
 
-func extractAddress(htmlContent string) Address {
-	addr := Address{
-		Street:       "",
-		PostalCode:   "",
-		Neighborhood: "",
+// extractAddress lê "Cidade, Estado, País"; Locality guarda o país e Region o estado (contrato do README)
+func extractAddress(card string) Address {
+	addr := Address{}
+	m := locationRe.FindStringSubmatch(card)
+	if m == nil {
+		return addr
 	}
-
-	// Padrão: City, State, Country em um <p>
-	re := regexp.MustCompile(`>([^<>]+,\s*[^<>]+,\s*[A-Za-z]+)</p>`)
-	matches := re.FindAllStringSubmatch(htmlContent, -1)
-
-	for _, match := range matches {
-		if len(match) > 1 {
-			location := strings.TrimSpace(match[1])
-			// Verificar se parece uma localização (tem vírgulas separando partes)
-			parts := strings.Split(location, ",")
-			if len(parts) >= 2 {
-				lastPart := strings.TrimSpace(parts[len(parts)-1])
-				// Verificar se a última parte é um país
-				if isCountry(lastPart) {
-					addr.Name = location
-					addr.Locality = lastPart
-					if len(parts) >= 3 {
-						addr.Region = strings.TrimSpace(parts[1])
-					}
-					break
-				}
-			}
-		}
+	location := parser.CleanText(m[1])
+	parts := strings.Split(location, ",")
+	if len(parts) < 2 {
+		return addr
 	}
-
+	addr.Name = location
+	addr.Locality = strings.TrimSpace(parts[len(parts)-1])
+	if len(parts) >= 3 {
+		addr.Region = strings.TrimSpace(parts[1])
+	}
 	return addr
 }
 
-func isCountry(s string) bool {
-	countries := []string{
-		"Brazil", "Brasil", "USA", "United States", "UK", "United Kingdom",
-		"Canada", "Germany", "France", "Spain", "Portugal", "Italy",
-		"Argentina", "Mexico", "Chile", "Colombia", "Peru",
-	}
-	for _, c := range countries {
-		if strings.EqualFold(s, c) {
-			return true
+// extractAvatarURL escolhe a maior resolução entre as URLs de foto de perfil (src e srcset)
+func extractAvatarURL(card string) string {
+	bestURL, bestSize := "", 0
+	for _, m := range avatarRe.FindAllStringSubmatch(card, -1) {
+		size := 0
+		fmt.Sscanf(m[1], "%d", &size)
+		if size > bestSize {
+			bestSize, bestURL = size, html.UnescapeString(m[0])
 		}
 	}
-	return false
-}
-
-func extractAvatarURL(htmlContent string) string {
-	// Procura pela maior resolução de foto de perfil
-	re := regexp.MustCompile(`(https://media\.licdn\.com/dms/image/[^"]*profile-displayphoto[^"]*)`)
-	matches := re.FindAllString(htmlContent, -1)
-
-	bestURL := ""
-	bestSize := 0
-
-	for _, url := range matches {
-		// Decodificar &amp;
-		url = strings.ReplaceAll(url, "&amp;", "&")
-
-		// Verificar tamanho pela URL
-		sizeRe := regexp.MustCompile(`(\d+)_(\d+)`)
-		sizeMatch := sizeRe.FindStringSubmatch(url)
-		if len(sizeMatch) > 1 {
-			size := 0
-			fmt.Sscanf(sizeMatch[1], "%d", &size)
-			if size > bestSize {
-				bestSize = size
-				bestURL = url
-			}
-		}
-	}
-
-	if bestURL == "" && len(matches) > 0 {
-		bestURL = strings.ReplaceAll(matches[0], "&amp;", "&")
-	}
-
 	return bestURL
 }
 
-func extractHeadline(htmlContent string) string {
-	// Procura headline após o nome
-	patterns := []string{
-		`aria-label="[^"]+">.*?<p[^>]*>([^<]+)</p>.*?<p[^>]*>([^<]{20,})</p>`,
-		`>([^<]*(?:Senior|Manager|Director|Engineer|Developer|Founder|CEO|CTO|Recruiter|Talent|Tech)[^<]*)</p>`,
+// extractHeadline: primeiro <p> após o nome que não é o grau de conexão ("· 3rd")
+func extractHeadline(card string) string {
+	loc := nameBlockRe.FindStringIndex(card)
+	if loc == nil {
+		return ""
 	}
-
-	for _, pattern := range patterns {
-		re := regexp.MustCompile(pattern)
-		matches := re.FindStringSubmatch(htmlContent)
-		if len(matches) > 1 {
-			headline := strings.TrimSpace(matches[len(matches)-1])
-			if len(headline) > 20 && len(headline) < 300 {
-				return parser.CleanText(headline)
-			}
+	for _, m := range paragraphRe.FindAllStringSubmatch(card[loc[1]:], -1) {
+		text := parser.CleanText(m[1])
+		if text != "" && !strings.HasPrefix(text, "·") {
+			return text
 		}
 	}
-
-	// Busca alternativa
-	re := regexp.MustCompile(`>([^<]*\|[^<]*\|[^<]*)</p>`)
-	matches := re.FindStringSubmatch(htmlContent)
-	if len(matches) > 1 {
-		return parser.CleanText(strings.TrimSpace(matches[1]))
-	}
-
 	return ""
 }
 
-func extractCompanyAndUniversity(htmlContent string) (company, university string) {
-	// Padrão comum: "Company · University"
-	re := regexp.MustCompile(`>([^<]+)\s*·\s*([^<]+)</p>`)
-	matches := re.FindStringSubmatch(htmlContent)
-	if len(matches) > 2 {
-		company = strings.TrimSpace(matches[1])
-		university = strings.TrimSpace(matches[2])
+// firstGroup devolve o texto limpo do primeiro grupo de re em s, sem o sufixo "+ N more"
+func firstGroup(re *regexp.Regexp, s string, suffix *regexp.Regexp) string {
+	if m := re.FindStringSubmatch(s); m != nil {
+		return suffix.ReplaceAllString(parser.CleanText(m[1]), "")
 	}
-	return
+	return ""
 }
 
-func extractDescription(htmlContent string) string {
-	// Procura pelo about/description no expandable-text-box
-	re := regexp.MustCompile(`data-testid="expandable-text-box"[^>]*>([^<]+(?:<[^>]+>[^<]*)*?)(?:</span>|<button)`)
-	matches := re.FindStringSubmatch(htmlContent)
-	if len(matches) > 1 {
-		desc := matches[1]
-		// Limpar HTML
-		desc = parser.CleanText(desc)
-		// Converter quebras de linha
-		desc = strings.ReplaceAll(desc, "\n", "<br><br>")
-		// Remover <br><br> repetidos
-		for strings.Contains(desc, "<br><br><br>") {
-			desc = strings.ReplaceAll(desc, "<br><br><br>", "<br><br>")
-		}
-		return strings.TrimSpace(desc)
+// extractDescription devolve o texto expandido da seção About
+func extractDescription(region string) string {
+	i := strings.Index(region, ">About</h2>")
+	if i < 0 {
+		return ""
 	}
-
-	// Busca alternativa pelo padrão "My career" ou "Minha carreira"
-	patterns := []string{
-		`(?is)(my career[^<]{50,1000})`,
-		`(?is)(minha carreira[^<]{50,1000})`,
+	if m := aboutTextRe.FindStringSubmatch(region[i:]); m != nil {
+		return parser.CleanText(m[1])
 	}
-
-	for _, pattern := range patterns {
-		re := regexp.MustCompile(pattern)
-		matches := re.FindStringSubmatch(htmlContent)
-		if len(matches) > 1 {
-			return parser.CleanText(matches[1])
-		}
-	}
-
 	return ""
 }
 

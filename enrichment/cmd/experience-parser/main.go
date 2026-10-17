@@ -213,10 +213,10 @@ func newExperience() Experience {
 	}
 }
 
-// headerTexts retorna os textos dos <p> do cabeçalho do item (antes de descrição, skills e sub-cargos)
+// headerTexts retorna os textos dos <p> do cabeçalho do item (antes de descrição, skills, mídias anexadas e sub-cargos)
 func headerTexts(block string) []string {
 	end := len(block)
-	for _, marker := range []string{`data-testid="expandable-text-box"`, "skill-associations-details", "<li"} {
+	for _, marker := range []string{`data-testid="expandable-text-box"`, "skill-associations-details", "<li", "Thumbnail for"} {
 		// A partir de 1: o próprio bloco pode começar com <li
 		if i := strings.Index(block[1:], marker); i >= 0 && i+1 < end {
 			end = i + 1
