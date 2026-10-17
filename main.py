@@ -159,7 +159,10 @@ class LinkedInScraper:
                 print(f"  URL atual: {self.driver.current_url} | título: {self.driver.title!r}")
                 os.makedirs("output", exist_ok=True)
                 self.driver.save_screenshot("output/login_error.png")
-                print("  Screenshot salvo em output/login_error.png")
+                with open("output/login_error.html", "w") as f:
+                    f.write(self.driver.page_source)
+                print("  Screenshot e HTML salvos em output/login_error.{png,html}")
+                print(f"  iframes na página: {len(self.driver.find_elements(By.TAG_NAME, 'iframe'))}")
             except Exception:
                 pass
             if self.headless:
