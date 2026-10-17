@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Manifest de coleta (ADR-0010)",
+  "type": "object",
+  "required": ["schema_version", "job_id", "linkedin_url", "collected_at", "collector", "sections"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "job_id": {"type": "string", "minLength": 1},
+    "account_id": {"type": ["string", "null"]},
+    "linkedin_url": {"type": "string", "minLength": 1},
+    "collected_at": {"type": "string", "format": "date-time"},
+    "collector": {
+      "type": "object",
+      "required": ["type", "version"],
+      "properties": {
+        "type": {"enum": ["server", "extension"]},
+        "version": {"type": "string"}
+      }
+    },
+    "sections": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "required": ["file", "status"],
+        "properties": {
+          "file": {"type": ["string", "null"]},
+          "status": {"enum": ["ok", "redirected", "timeout", "not_collected"]},
+          "final_url": {"type": "string"}
+        },
+        "allOf": [
+          {
+            "if": {"properties": {"status": {"enum": ["ok", "redirected"]}}},
+            "then": {"properties": {"file": {"type": "string"}}},
+            "else": {"properties": {"file": {"type": "null"}}}
+          },
+          {
+            "if": {"properties": {"status": {"const": "redirected"}}},
+            "then": {"required": ["final_url"]}
+          }
+        ]
+      }
+    }
+  }
+}

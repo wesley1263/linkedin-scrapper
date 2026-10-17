@@ -28,6 +28,7 @@ class SectionResult:
     items: int = 0
     duration_ms: int = 0
     error: Optional[str] = None
+    final_url: Optional[str] = None     # URL em que a aba terminou (detecta redirecionamento; ADR-0010)
 
     @property
     def ok(self):
