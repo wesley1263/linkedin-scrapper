@@ -1,11 +1,7 @@
 package main
 
 import (
-	"encoding/json"
-	"fmt"
-	"io/ioutil"
 	"linkedin-enrichment/internal/parser"
-	"log"
 	"os"
 	"regexp"
 	"strings"
@@ -301,64 +297,17 @@ func (lp *LanguageParser) isValidLanguage(lang Language) bool {
 	return lang.LanguageText != "" && len([]rune(lang.LanguageText)) <= 50
 }
 
-// processHTMLFile processa um arquivo HTML e retorna dados de idiomas
-func processHTMLFile(filename string) ([]Language, error) {
-	content, err := ioutil.ReadFile(filename)
-	if err != nil {
-		return nil, fmt.Errorf("erro ao ler arquivo %s: %v", filename, err)
-	}
-
-	parser := NewLanguageParser(string(content))
-	languages := parser.extractLanguageData()
-
-	if len(languages) == 0 {
-		return []Language{}, nil
-	}
-
-	return languages, nil
-}
-
-// saveToJSON salva os dados em formato JSON
-func saveToJSON(languages []Language, filename string) error {
-	jsonData, err := json.MarshalIndent(languages, "", "  ")
-	if err != nil {
-		return fmt.Errorf("erro ao converter para JSON: %v", err)
-	}
-
-	err = ioutil.WriteFile(filename, jsonData, 0644)
-	if err != nil {
-		return fmt.Errorf("erro ao salvar arquivo %s: %v", filename, err)
-	}
-
-	return nil
-}
-
 func main() {
-	if len(os.Args) < 2 {
-		log.Fatal("Uso: go run main.go <arquivo_html> [arquivo_saida.json]")
-	}
-
-	inputFile := os.Args[1]
-	outputFile := "languages.json"
-
-	if len(os.Args) >= 3 {
-		outputFile = os.Args[2]
-	}
-
-	fmt.Printf("Processando arquivo: %s\n", inputFile)
-
-	languages, err := processHTMLFile(inputFile)
-	if err != nil {
-		log.Fatalf("Erro ao processar arquivo: %v", err)
-	}
-
-	fmt.Printf("Encontrados %d idiomas\n", len(languages))
-
-	err = saveToJSON(languages, outputFile)
-	if err != nil {
-		log.Fatalf("Erro ao salvar JSON: %v", err)
-	}
-
-	fmt.Printf("Dados salvos em: %s\n", outputFile)
-
+	os.Exit(parser.RunSection(parser.Spec{
+		Section:       "languages",
+		DefaultOutput: "languages.json",
+		AllowEmpty:    true,
+		Parse: func(htmlContent string) (any, int) {
+			languages := NewLanguageParser(htmlContent).extractLanguageData()
+			if languages == nil {
+				languages = []Language{}
+			}
+			return languages, len(languages)
+		},
+	}, os.Args[1:], os.Stdout, os.Stderr))
 }

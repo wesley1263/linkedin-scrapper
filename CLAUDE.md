@@ -22,6 +22,8 @@ Os parsers Go vivem em `enrichment/` (módulo `linkedin-enrichment`, futuro repo
 cd enrichment && for p in linkedin-parser experience-parser education-parser language-parser; do go build -o bin/$p ./cmd/$p; done
 ```
 
+Testes Python (`observability.py`, stdlib `unittest`), rodando da raiz do repo: `pipenv run python -m unittest discover -s tests -t .`
+
 Testes golden dos parsers (lint não configurado), rodando de `enrichment/`:
 
 ```bash
@@ -30,7 +32,7 @@ go test ./... -update                  # regrava os *.golden.json (conferir o di
 python3 tools/anonymize_fixture.py <output/user/secao.html> cmd/<parser>/testdata/<secao>.html --name "Nome Real" [--sub "real=>falso"]
 ```
 
-O CI (`.github/workflows/enrichment-tests.yml`) roda `gofmt`, `go vet` e `go test ./...` em `enrichment/` a cada push/PR que o toque.
+O CI (`.github/workflows/enrichment-tests.yml`) roda `gofmt`, `go vet` e `go test ./...` em `enrichment/` a cada push/PR que o toque. `collector-tests.yml` roda os testes Python (só stdlib: `observability.py` não pode importar Selenium).
 
 Fixtures em `cmd/<parser>/testdata/` são HTML **anonimizado** (o script recorta só a lista de itens e troca nomes, empresas, URLs e textos); nunca commitar HTML bruto de `output/`. Depois de gerar, conferir com `grep -i` por nomes reais — o script não pega tudo (ex.: títulos de mídia, locais com texto livre; use `--sub`). Para validar contra um HTML real, recompile e rode:
 
@@ -42,7 +44,9 @@ Fixtures em `cmd/<parser>/testdata/` são HTML **anonimizado** (o script recorta
 
 - **`main.py`** (`LinkedInScraper`): reutiliza primeiro a sessão do perfil persistente do Chrome (`--user-data-dir`, por padrão `~/.linkedin_chrome_profile`; sobrescreva com `CHROME_PROFILE_DIR`), depois `linkedin_cookies.json`, e só faz login com usuário/senha (lidos do `.env` via `python-dotenv`) se ambos falharem. Login é detectado pela URL (`/feed`), não por classes CSS.
   - A página `/login` não tem mais `#username`/`#password`: os campos têm ids aleatórios e o formulário é renderizado **duas vezes, uma oculta** — por isso `login()` usa o primeiro campo *visível* e envia com Enter. Em falha, grava `output/login_error.{png,html}` com o que o driver viu.
-  - Fluxo: abre as seções de detalhe (`DETAIL_SECTIONS`) em abas via `window.open` para carregarem em paralelo, carrega o perfil na aba principal e depois visita cada aba para expandir conteúdo (scroll / "Load more" / "more" do About) e gravar `output/<username>/<secao>.html`. Cada parser Go roda em background (`subprocess.Popen`) assim que o HTML é salvo; os binários precisam estar compilados em `enrichment/bin/` e o script rodar a partir da raiz.
+  - Fluxo: abre as seções de detalhe (`DETAIL_SECTIONS`) em abas via `window.open` para carregarem em paralelo, carrega o perfil na aba principal e depois visita cada aba para expandir conteúdo (scroll / "Load more" / "more" do About) e gravar `output/<username>/<secao>.html`. Cada parser Go roda na hora (`observability.run_parser`, síncrono: leva ms e assim o screenshot de uma falha ainda é da aba da seção) assim que o HTML é salvo; os binários precisam estar compilados em `enrichment/bin/` e o script rodar a partir da raiz.
+  - Status (ADR-0006): cada seção vira um `SectionResult` (`collect_status` + `parse_status`) e o job `success`/`partial`/`failed`/`auth_required`/`not_found` em `output/<perfil>/status.json`; exit code 0/2/1. Uma falha em uma seção não derruba as outras (`process_section`). Lógica pura em `observability.py` (testada sem Selenium). Logs com `logging` (`LOG_FORMAT=json`, `LOG_LEVEL`); não volte a usar `print` nem `except:` sem tipo. `rate_limited` ainda não é detectado (ADR-0005). `linkedin.py` ainda usa `print`.
+  - Contrato dos binários Go (`internal/parser/section.go`, `RunSection`): stdout = uma linha JSON `{section,status,items,duration_ms,error?}`, exit 0 para ok/empty, 3 para failed, 1 para erro de I/O. `empty` só vale se a página tem "Nothing to see for now"/"Nada para ver por enquanto"; o `linkedin-parser` nunca é `empty`.
   - No perfil só o "… more" da seção About é clicado (`click_more_buttons`): os "more" dos posts da atividade navegam para fora do perfil e já fizeram o `profile.html` sair como a página "Post". Se um clique navegar, o script volta para a URL do perfil.
   - Sem `time.sleep` fixos: as esperas usam `wait_until_stable()` (DOM sem mudar de tamanho por um intervalo). Ao mexer em scroll/expansão, manter esse padrão.
   - Mapeamento seção → URL → binário: perfil (`<url>`) → `linkedin-parser`; `details/experience/` → `experience-parser`; `details/education/` → `education-parser`; `details/languages/` → `language-parser`.
