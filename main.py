@@ -346,6 +346,9 @@ class LinkedInScraper:
             self.wait_until_stable()
         return 1
 
+# Onde ficam os binários dos parsers Go; após a separação dos repositórios (ADR-0013) vêm do linkedin-enrichment
+PARSER_BIN_DIR = os.getenv("PARSER_BIN_DIR", "./enrichment/bin")
+
 # (arquivo, path relativo ao perfil, binário do parser)
 DETAIL_SECTIONS = [
     ("experience", "details/experience/", "experience-parser"),
@@ -393,7 +396,7 @@ def process_section(scraper, name, collect, parser, output_dir):
         log.error("Falha ao coletar: %s %s", type(e).__name__, message, extra=extra)
         result = obs.SectionResult(section=name, collect_status="failed", error=f"{type(e).__name__}: {message}")
     else:
-        result = obs.run_parser(f"./enrichment/bin/{parser}", f"{output_dir}/{name}.html",
+        result = obs.run_parser(os.path.join(PARSER_BIN_DIR, parser), f"{output_dir}/{name}.html",
                                 f"{output_dir}/{name}.json", name)
 
     result.final_url = final_url
