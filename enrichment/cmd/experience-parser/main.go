@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html"
+	"linkedin-enrichment/internal/parser"
 	"os"
 	"regexp"
 	"strings"
@@ -128,29 +129,12 @@ func extractItemBlocks(htmlContent string) []string {
 		if start < lastEnd {
 			continue // item aninhado em outro já extraído
 		}
-		block := balancedBlock(htmlContent, start, "div")
+		block := parser.BalancedBlock(htmlContent, start, "div")
 		blocks = append(blocks, block)
 		lastEnd = start + len(block)
 	}
 
 	return blocks
-}
-
-// balancedBlock retorna o elemento <tag> que começa em start, até a tag de fechamento correspondente
-func balancedBlock(s string, start int, tag string) string {
-	re := regexp.MustCompile(`<` + tag + `\b|</` + tag + `>`)
-	depth := 0
-	for _, loc := range re.FindAllStringIndex(s[start:], -1) {
-		if s[start+loc[0]+1] == '/' {
-			depth--
-		} else {
-			depth++
-		}
-		if depth == 0 {
-			return s[start : start+loc[1]]
-		}
-	}
-	return s[start:]
 }
 
 // parseItem trata os dois formatos de item:
@@ -165,7 +149,7 @@ func parseItem(block string) []Experience {
 		base.AvatarURL = html.UnescapeString(match[1])
 	}
 	if match := logoAltRe.FindStringSubmatch(block); len(match) > 1 {
-		base.Company.Name = cleanHTML(match[1])
+		base.Company.Name = parser.CleanText(match[1])
 	}
 
 	header := headerTexts(block)
@@ -199,7 +183,7 @@ func parseItem(block string) []Experience {
 		if loc[0] < lastEnd {
 			continue
 		}
-		li := balancedBlock(block, loc[0], "li")
+		li := parser.BalancedBlock(block, loc[0], "li")
 		lastEnd = loc[0] + len(li)
 
 		liHeader := headerTexts(li)
@@ -245,7 +229,7 @@ func headerTexts(block string) []string {
 		if strings.Contains(match[1], "<a ") {
 			continue
 		}
-		text := cleanHTML(match[1])
+		text := parser.CleanText(match[1])
 		if text != "" && !strings.Contains(text, "helped me get this job") && !strings.HasPrefix(text, "Skills:") {
 			texts = append(texts, text)
 		}
@@ -349,18 +333,4 @@ func extractDescription(block string) string {
 		}
 	}
 	return strings.Join(lines, "\n")
-}
-
-func cleanHTML(s string) string {
-	// Remove tags HTML
-	s = tagRe.ReplaceAllString(s, " ")
-
-	// Decodificar entidades HTML
-	s = html.UnescapeString(s)
-	s = strings.ReplaceAll(s, "​", "")
-
-	// Limpar espaços extras
-	s = regexp.MustCompile(`\s+`).ReplaceAllString(s, " ")
-
-	return strings.TrimSpace(s)
 }

@@ -1,5 +1,6 @@
 import os
 import json
+from dotenv import load_dotenv
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -12,6 +13,8 @@ import subprocess
 import sys
 from selenium.webdriver.common.keys import Keys
 
+load_dotenv()  # carrega LINKEDIN_EMAIL/LINKEDIN_PASSWORD do .env, sem sobrescrever o ambiente
+
 COOKIES_FILE = "linkedin_cookies.json"
 class LinkedInScraper:
     def __init__(self, headless=True):
@@ -23,7 +26,8 @@ class LinkedInScraper:
         """Configura o driver do Chrome com opções anti-detecção"""
         options = Options()
         # Perfil persistente
-        options.add_argument("--user-data-dir=/home/weslei/.linkedin_chrome_profile")
+        profile_dir = os.path.expanduser(os.environ.get("CHROME_PROFILE_DIR", "~/.linkedin_chrome_profile"))
+        options.add_argument(f"--user-data-dir={profile_dir}")
         if self.headless:
             options.add_argument("--headless=new")
             # Sem tamanho explícito o headless abre em 800x600 e o LinkedIn pode servir layout mobile
@@ -117,20 +121,24 @@ class LinkedInScraper:
                 print("Sessão do perfil do Chrome já ativa")
                 return True
 
-            # Aguarda e preenche email
+            # O layout novo não tem mais #username/#password (ids aleatórios) e renderiza o formulário
+            # duas vezes, uma oculta: usa sempre o primeiro campo visível
+            def first_visible(css):
+                return lambda d: next((e for e in d.find_elements(By.CSS_SELECTOR, css) if e.is_displayed()), False)
+
             email_field = WebDriverWait(self.driver, 10).until(
-                EC.presence_of_element_located((By.ID, "username"))
+                first_visible("#username, input[name='session_key'], input[autocomplete~='username'], input[type='email']")
             )
             email_field.send_keys(email)
-            
-            # Preenche senha
-            password_field = self.driver.find_element(By.ID, "password")
+
+            password_field = WebDriverWait(self.driver, 5).until(
+                first_visible("#password, input[name='session_password'], input[type='password']")
+            )
             password_field.send_keys(password)
-            
-            # Clica no botão de login
-            login_button = self.driver.find_element(By.XPATH, "//button[@type='submit']")
-            login_button.click()
-            
+
+            # Enter no campo de senha envia o formulário sem depender do markup do botão
+            password_field.send_keys(Keys.RETURN)
+
             # Aguarda chegar no feed; se cair em checkpoint (2FA/captcha), dá tempo de resolver manualmente
             WebDriverWait(self.driver, 15).until(
                 lambda d: "/feed" in d.current_url or "/checkpoint" in d.current_url
@@ -146,7 +154,19 @@ class LinkedInScraper:
             return True
             
         except Exception as e:
-            print(f"Erro no login: {str(e)}")
+            print(f"Erro no login ({type(e).__name__}): {str(e).splitlines()[0] if str(e) else 'sem mensagem'}")
+            try:
+                print(f"  URL atual: {self.driver.current_url} | título: {self.driver.title!r}")
+                os.makedirs("output", exist_ok=True)
+                self.driver.save_screenshot("output/login_error.png")
+                with open("output/login_error.html", "w") as f:
+                    f.write(self.driver.page_source)
+                print("  Screenshot e HTML salvos em output/login_error.{png,html}")
+                print(f"  iframes na página: {len(self.driver.find_elements(By.TAG_NAME, 'iframe'))}")
+            except Exception:
+                pass
+            if self.headless:
+                print("  Dica: rode com --visible para ver a página e resolver login/verificação manualmente")
             return False
 
     def scroll_to_bottom(self):
@@ -263,24 +283,47 @@ class LinkedInScraper:
         print(f"Load more clicado {clicks} vezes")
         return clicks
     
-    def click_more_buttons(self):
-        """Clica em todos os botões 'more'"""
-        try:
-            buttons = self.driver.find_elements(
-                By.XPATH, "//button[.//span[contains(text(), 'more')]]"
-            )
-            
-            for button in buttons:
-                try:
-                    self.driver.execute_script("arguments[0].click();", button)
-                except:
-                    continue
+    # Acha o título da seção About/Sobre e sobe na árvore até o menor ancestral que tenha um botão
+    # "more"/"mais"; clica só nesse botão. Retorna o texto do botão clicado ou None.
+    CLICK_ABOUT_MORE_JS = """
+    const titles = ['about', 'sobre', 'acerca de', 'info'];
+    const heading = [...document.querySelectorAll('h1, h2, h3, p, span')].find(
+        e => e.children.length === 0 && titles.includes(e.textContent.trim().toLowerCase())
+             && e.offsetParent !== null && !e.closest('header, nav, footer')
+    );
+    if (!heading) return null;
+    let node = heading;
+    for (let i = 0; i < 8 && node.parentElement; i++) {
+        node = node.parentElement;
+        const btn = [...node.querySelectorAll('button')].find(b => /^\\W*(more|mais)\\b/i.test(b.textContent.trim())
+                                                              || /\\b(more|mais)$/i.test(b.textContent.trim()));
+        if (btn) {
+            btn.scrollIntoView({block: 'center'});
+            btn.click();
+            return btn.textContent.trim();
+        }
+    }
+    return null;
+    """
 
-            if buttons:
-                self.wait_until_stable(timeout=5, quiet=0.5)
-            return len(buttons)
-        except:
+    def click_more_buttons(self, page_url=None):
+        """Expande só o texto da seção About ("…more"), sem tocar nos outros botões "more" da página
+        (posts da atividade, por exemplo, navegam para fora do perfil). Retorna 1 se clicou, 0 se não."""
+        try:
+            label = self.driver.execute_script(self.CLICK_ABOUT_MORE_JS)
+        except Exception as e:
+            print(f"  Falha ao expandir About: {type(e).__name__}")
             return 0
+        if not label:
+            print("  Botão 'more' do About não encontrado (texto já completo ou seção ausente)")
+            return 0
+        print(f"  About expandido (botão: {label!r})")
+        self.wait_until_stable(timeout=5, quiet=0.5)
+        if page_url and self.driver.current_url.split("?")[0].rstrip("/") != page_url.split("?")[0].rstrip("/"):
+            print(f"  Navegou para {self.driver.current_url}; voltando ao perfil")
+            self.driver.get(page_url)
+            self.wait_until_stable()
+        return 1
 
 # (arquivo, path relativo ao perfil, binário do parser)
 DETAIL_SECTIONS = [
@@ -292,7 +335,7 @@ DETAIL_SECTIONS = [
 
 def run_parser(parser, output_dir, name):
     """Roda o parser Go em background sobre <name>.html, gerando <name>.json"""
-    return subprocess.Popen([f"./{parser}", f"{output_dir}/{name}.html", f"{output_dir}/{name}.json"])
+    return subprocess.Popen([f"./enrichment/bin/{parser}", f"{output_dir}/{name}.html", f"{output_dir}/{name}.json"])
 
 
 # Exemplo de uso
@@ -331,7 +374,7 @@ if __name__ == "__main__":
             scraper.driver.get(base_url + "?locale=pt_BR")
             scraper.wait_until_stable()
             scraper.scroll_to_bottom()  # scroll até o fim
-            scraper.click_more_buttons()  # expande todos os textos truncados
+            scraper.click_more_buttons(base_url)  # expande todos os textos truncados
             scraper.save_html_and_screenshot("profile.html", output_dir)
             parsers.append(run_parser("linkedin-parser", output_dir, "profile"))
 

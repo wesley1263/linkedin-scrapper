@@ -5,8 +5,9 @@ name = "pypi"
 
 [packages]
 selenium = "*"
-requests = "*"
 pywebcopy = "*"
+requests = "*"
+python-dotenv = "*"
 
 [dev-packages]
 
