@@ -12,6 +12,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
 import time
 import os
+from dotenv import load_dotenv
 import sys
 import logging
 import random
@@ -28,6 +29,7 @@ logging.basicConfig(
 # -------------------------
 # CONFIGURAÇÕES
 # -------------------------
+load_dotenv()
 EMAIL = os.getenv("LINKEDIN_EMAIL")
 PASSWORD = os.getenv("LINKEDIN_PASSWORD")
 DOWNLOAD_DIR = "./resumes"

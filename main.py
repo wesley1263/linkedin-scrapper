@@ -1,5 +1,6 @@
 import os
 import json
+from dotenv import load_dotenv
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -11,6 +12,8 @@ import tempfile
 import subprocess
 import sys
 from selenium.webdriver.common.keys import Keys
+
+load_dotenv()  # carrega LINKEDIN_EMAIL/LINKEDIN_PASSWORD do .env, sem sobrescrever o ambiente
 
 COOKIES_FILE = "linkedin_cookies.json"
 class LinkedInScraper:

@@ -10,7 +10,7 @@ Scraper de perfis do LinkedIn em duas camadas: **Python + Selenium** navega e sa
 
 ```bash
 pipenv install                        # dependências Python (Python 3.12)
-export LINKEDIN_EMAIL=... LINKEDIN_PASSWORD=...   # obrigatórias nos dois scripts
+export LINKEDIN_EMAIL=... LINKEDIN_PASSWORD=...   # obrigatórias nos dois scripts (ou defina no .env)
 pipenv run python main.py [<url>]     # scraping completo, headless; sem <url> pede via input()
 pipenv run python main.py --visible   # abre o Chrome visível (necessário p/ resolver checkpoint/2FA)
 pipenv run python linkedin.py <url>   # baixa o PDF do perfil para ./resumes/
