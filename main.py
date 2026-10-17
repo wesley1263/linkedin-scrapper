@@ -283,24 +283,38 @@ class LinkedInScraper:
         print(f"Load more clicado {clicks} vezes")
         return clicks
     
-    def click_more_buttons(self):
-        """Clica em todos os botões 'more'"""
-        try:
-            buttons = self.driver.find_elements(
-                By.XPATH, "//button[.//span[contains(text(), 'more')]]"
-            )
-            
-            for button in buttons:
-                try:
-                    self.driver.execute_script("arguments[0].click();", button)
-                except:
-                    continue
+    def click_more_buttons(self, page_url=None):
+        """Clica nos botões 'more' para expandir textos truncados.
 
-            if buttons:
+        Se algum clique navegar para fora da página (ex.: "...more" de um post da atividade abre o
+        post), volta para page_url e segue sem aquele botão, para não salvar o HTML da página errada.
+        """
+        # Botões já tratados recebem um atributo, pois os expandidos somem e os índices mudam
+        xpath = "//button[.//span[contains(text(), 'more')]][not(@data-scraper-done)]"
+        clicked = 0
+        try:
+            while True:
+                buttons = self.driver.find_elements(By.XPATH, xpath)
+                if not buttons:
+                    break
+                button = buttons[0]
+                try:
+                    self.driver.execute_script(
+                        "arguments[0].setAttribute('data-scraper-done', '1'); arguments[0].click();", button
+                    )
+                except Exception:
+                    continue
+                clicked += 1
+                if page_url and self.driver.current_url.split("?")[0].rstrip("/") != page_url.split("?")[0].rstrip("/"):
+                    print(f"  Clique em 'more' navegou para {self.driver.current_url}; voltando ao perfil")
+                    self.driver.get(page_url)
+                    self.wait_until_stable()
+                    self.scroll_to_bottom()
+            if clicked:
                 self.wait_until_stable(timeout=5, quiet=0.5)
-            return len(buttons)
-        except:
-            return 0
+        except Exception:
+            pass
+        return clicked
 
 # (arquivo, path relativo ao perfil, binário do parser)
 DETAIL_SECTIONS = [
@@ -351,7 +365,7 @@ if __name__ == "__main__":
             scraper.driver.get(base_url + "?locale=pt_BR")
             scraper.wait_until_stable()
             scraper.scroll_to_bottom()  # scroll até o fim
-            scraper.click_more_buttons()  # expande todos os textos truncados
+            scraper.click_more_buttons(base_url)  # expande todos os textos truncados
             scraper.save_html_and_screenshot("profile.html", output_dir)
             parsers.append(run_parser("linkedin-parser", output_dir, "profile"))
 
