@@ -116,3 +116,33 @@ def parse_message(manifest, zip_key):
         "linkedin_url": manifest["linkedin_url"],
         "zip_key": zip_key,
     }).encode()
+
+
+# Seção -> caminho relativo ao perfil (fonte única; main.DETAIL_SECTIONS deriva daqui)
+SECTION_PATHS = {
+    "experience": "details/experience/",
+    "education": "details/education/",
+    "languages": "details/languages/",
+}
+
+
+def expected_urls(base_url):
+    return {"profile": base_url, **{name: f"{base_url}{path}" for name, path in SECTION_PATHS.items()}}
+
+
+def store_bundle(storage, job_id, account_id, base_url, dir_name, output_dir, collected_at, results):
+    """Monta manifest + zip dos HTMLs coletados e grava no storage. Devolve (key, manifest), ou None se não há HTML.
+
+    Não publica em `parse` (quem chama decide a ordem em relação ao status do job). Erros de storage propagam.
+    """
+    expected = expected_urls(base_url)
+    sections = {
+        r.section: (f"{r.section}.html", section_status(r, expected[r.section]), r.final_url)
+        for r in results
+    }
+    if not any(status in (OK, REDIRECTED) for _, status, _ in sections.values()):
+        return None
+    manifest = build_manifest(job_id, account_id, base_url, collected_at, sections)
+    key = bundle_key(dir_name, manifest)
+    storage.put(key, build_zip(output_dir, manifest))
+    return key, manifest

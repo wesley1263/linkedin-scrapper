@@ -105,6 +105,16 @@ Roda sem abrir o navegador (headless). Sem a URL como argumento, o script a soli
 Insira o URL do perfil a ser analisado: https://www.linkedin.com/in/username/
 ```
 
+### Modo serviço (consome jobs da API)
+
+```bash
+API_URL=http://localhost:8080 INTERNAL_TOKEN=... QUEUE_DRIVER=rabbitmq AMQP_URL=amqp://... \
+STORAGE_DRIVER=s3 S3_BUCKET=raw-profiles S3_ENDPOINT=... S3_ACCESS_KEY=... S3_SECRET_KEY=... \
+python main.py --worker            # --visible para resolver checkpoint/2FA
+```
+
+Consome o tópico `collect`, coleta o perfil, grava o zip no storage, marca o job como `collected` na API e publica em `parse` (o parser worker do `linkedin-enrichment` faz o resto). Não roda os parsers localmente.
+
 ### Download de PDF do Perfil
 
 ```bash

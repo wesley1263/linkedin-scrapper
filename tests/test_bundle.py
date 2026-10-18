@@ -95,5 +95,43 @@ class BuildZipTest(unittest.TestCase):
         self.assertEqual(msg, {"schema_version": 1, "job_id": "abc", "linkedin_url": URL, "zip_key": key})
 
 
+class StoreBundleTest(unittest.TestCase):
+    def test_expected_urls(self):
+        urls = bundle.expected_urls(URL)
+        self.assertEqual(urls["profile"], URL)
+        self.assertEqual(urls["experience"], URL + "details/experience/")
+        self.assertEqual(set(urls), {"profile", "experience", "education", "languages"})
+
+    def test_stores_zip_and_returns_key_and_manifest(self):
+        import infra
+        with tempfile.TemporaryDirectory() as src, tempfile.TemporaryDirectory() as root:
+            with open(os.path.join(src, "profile.html"), "w") as f:
+                f.write("<html/>")
+            storage = infra.FsStorage(root)
+            results = [SectionResult("profile", final_url=URL),
+                       SectionResult("education", collect_status="failed", error="TimeoutException: x")]
+            key, manifest = bundle.store_bundle(storage, "job1", "acc", URL, "fulano", src, WHEN, results)
+            self.assertEqual(key, "raw/fulano/20261015T140211Z.zip")
+            self.assertEqual(manifest["sections"]["education"]["status"], "timeout")
+            with zipfile.ZipFile(io.BytesIO(storage.get(key))) as zf:
+                self.assertEqual(sorted(zf.namelist()), ["manifest.json", "profile.html"])
+
+    def test_returns_none_when_no_html_was_collected(self):
+        import infra
+        with tempfile.TemporaryDirectory() as root:
+            results = [SectionResult("profile", collect_status="failed", error="x")]
+            self.assertIsNone(bundle.store_bundle(infra.FsStorage(root), "j", None, URL, "fulano", root, WHEN, results))
+
+    def test_storage_errors_propagate(self):
+        class Broken:
+            def put(self, key, data):
+                raise OSError("disco cheio")
+        with tempfile.TemporaryDirectory() as src:
+            with open(os.path.join(src, "profile.html"), "w") as f:
+                f.write("<html/>")
+            with self.assertRaises(OSError):
+                bundle.store_bundle(Broken(), "j", None, URL, "fulano", src, WHEN, [SectionResult("profile", final_url=URL)])
+
+
 if __name__ == "__main__":
     unittest.main()
