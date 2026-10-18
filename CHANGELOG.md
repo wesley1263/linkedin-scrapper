@@ -16,6 +16,7 @@ Formato [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). Toda implem
 - Regras de fluxo no `CLAUDE.md` (branch por tarefa, sem commit automático, testes primeiro).
 
 ### Changed
+- Convenção registrada no `CLAUDE.md`: APIs HTTP do coletor Python usam FastAPI (o serviço Go segue com Gin).
 - `main.py` separado em `scrape_profile()` (coleta, devolve `CollectOutcome`) e os modos CLI/worker; o CLI continua coletando, parseando localmente e publicando em `parse` como antes.
 - Parsers Go extraídos para o repositório `linkedin-enrichment` (ADR-0001/0013); o repositório `-dev` foi adiado.
 - Compose usa `adobe/s3mock` no lugar do MinIO (que deixou de publicar imagens).
