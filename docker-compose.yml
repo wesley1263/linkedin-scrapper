@@ -1,0 +1,48 @@
+# Ambiente completo sem instalar nada na máquina: inclui a infra, a API e o parser worker do repo irmão
+# (../linkedin-enrichment) e adiciona o coletor. `docker compose up -d --build`.
+# Valores fixos são só de desenvolvimento local. Credenciais do LinkedIn: copie `.env.example` para `.env`.
+name: linkedin-enrichment
+
+include:
+  - ../linkedin-enrichment/docker-compose.yml
+
+services:
+  collector:
+    build: .
+    env_file:
+      - {path: .env, required: false}
+    environment:
+      API_URL: http://api:8080
+      INTERNAL_TOKEN: outro-segredo
+      QUEUE_DRIVER: rabbitmq
+      AMQP_URL: amqp://guest:guest@rabbitmq:5672/
+      STORAGE_DRIVER: s3
+      S3_BUCKET: raw-profiles
+      S3_ENDPOINT: http://s3:9090
+      S3_ACCESS_KEY: dev
+      S3_SECRET_KEY: dev
+      S3_REGION: us-east-1
+    volumes:
+      - .:/app                  # edições valem após `docker compose restart collector`
+      - collector-data:/data    # sessão do Chrome e estado do limitador de ritmo
+    shm_size: 1gb
+    depends_on:
+      api: {condition: service_healthy}
+      s3: {condition: service_started}
+
+  # `docker compose run --rm collector-test` (testes unitários) ou com INTEGRATION=1 os de integração.
+  collector-test:
+    build: .
+    profiles: [test]
+    command: ["python", "-m", "unittest", "discover", "-s", "tests", "-t", "."]
+    volumes: [".:/app"]
+    environment:
+      INTEGRATION: ${INTEGRATION:-}
+      AMQP_URL: amqp://guest:guest@rabbitmq:5672/
+      S3_ENDPOINT: http://s3:9090
+    depends_on:
+      rabbitmq: {condition: service_healthy}
+      s3: {condition: service_started}
+
+volumes:
+  collector-data:

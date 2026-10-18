@@ -8,7 +8,7 @@ import unittest
 import uuid
 
 ENABLED = os.getenv("INTEGRATION") == "1"
-S3_ENV = {"STORAGE_DRIVER": "s3", "S3_ENDPOINT": "http://localhost:9000", "S3_BUCKET": "raw-profiles",
+S3_ENV = {"STORAGE_DRIVER": "s3", "S3_ENDPOINT": os.getenv("S3_ENDPOINT", "http://localhost:9000"), "S3_BUCKET": "raw-profiles",
           "S3_ACCESS_KEY": "dev", "S3_SECRET_KEY": "dev"}
 AMQP_URL = os.getenv("AMQP_URL", "amqp://guest:guest@localhost:5672/")
 

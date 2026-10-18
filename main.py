@@ -61,6 +61,8 @@ class LinkedInScraper:
     })
         options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
         
+        if os.environ.get("CHROME_BIN"):  # ex.: Chromium da imagem Docker
+            options.binary_location = os.environ["CHROME_BIN"]
         self.driver = webdriver.Chrome(options=options)
         self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
     
