@@ -17,7 +17,7 @@ O repositório `linkedin-enrichment-dev` foi **adiado**: com só dois serviços,
 um schema JSON é custo sem ganho. Por ora o compose de infra fica em `dev/` do coletor e o schema do manifest em
 `schemas/` do coletor; o `linkedin-enrichment` terá uma cópia do schema, com teste que a compare, quando passar a ler o
 zip. O repositório `-dev` volta a fazer sentido quando houver Dockerfiles dos serviços e o compose integrado rodar de
-verdade. O restante da decisão abaixo continua valendo.
+verdade. Além disso, o MinIO deixou de publicar imagens (Docker Hub e Quay), então o compose usa `adobe/s3mock` (serviço `s3`, endpoint `http://s3:9090`, bucket `raw-profiles` criado na subida), e o `minio-init` deixou de existir; os trechos com MinIO abaixo valem como referência de S3 local. O restante da decisão continua valendo.
 
 ## Decisão
 

@@ -62,9 +62,14 @@ class FactoryTest(unittest.TestCase):
         self.assertIsInstance(infra.new_queue({"QUEUE_DRIVER": "memory"}), infra.MemoryQueue)
 
     def test_unknown_driver_fails_loudly(self):
-        with self.assertRaises(ValueError):
+        for factory, env in ((infra.new_storage, {"STORAGE_DRIVER": "gcs"}), (infra.new_queue, {"QUEUE_DRIVER": "sqs"})):
+            with self.assertRaises(ValueError):
+                factory(env)
+
+    def test_real_drivers_require_their_variables(self):
+        with self.assertRaisesRegex(ValueError, "S3_BUCKET"):
             infra.new_storage({"STORAGE_DRIVER": "s3"})
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(ValueError, "AMQP_URL"):
             infra.new_queue({"QUEUE_DRIVER": "rabbitmq"})
 
 

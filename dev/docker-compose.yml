@@ -16,21 +16,13 @@ services:
       test: ["CMD-SHELL", "pg_isready -U enrichment"]
       interval: 5s
 
-  minio:
-    image: minio/minio
-    command: server /data --console-address ":9001"
+  # S3 local. O MinIO deixou de publicar imagens (Docker Hub e Quay): usamos o S3Mock da Adobe, que cria o bucket
+  # na subida e aceita escrita condicional (If-None-Match), necessária para os zips imutáveis. Endpoint: http://localhost:9000
+  s3:
+    image: adobe/s3mock
     environment:
-      MINIO_ROOT_USER: minio
-      MINIO_ROOT_PASSWORD: minio12345
-    ports: ["9000:9000", "9001:9001"]
-    volumes: [miniodata:/data]
-
-  minio-init:
-    image: minio/mc
-    depends_on: [minio]
-    entrypoint: >
-      sh -c "mc alias set local http://minio:9000 minio minio12345 &&
-             mc mb --ignore-existing local/raw-profiles"
+      COM_ADOBE_TESTING_S3MOCK_STORE_INITIAL_BUCKETS: raw-profiles
+    ports: ["9000:9090"]
 
   rabbitmq:
     image: rabbitmq:3-management
