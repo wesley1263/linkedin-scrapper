@@ -6,10 +6,10 @@ O pacote não se chama `platform` (como no ADR) para não sombrear o módulo da 
 """
 import os
 
-from .messaging import MemoryQueue, Message, Queue
+from .messaging import Defer, MemoryQueue, Message, Queue
 from .storage import FsStorage, ObjectStorage
 
-__all__ = ["MemoryQueue", "Message", "Queue", "FsStorage", "ObjectStorage", "new_queue", "new_storage"]
+__all__ = ["Defer", "MemoryQueue", "Message", "Queue", "FsStorage", "ObjectStorage", "new_queue", "new_storage"]
 
 
 def _required(env, *names):

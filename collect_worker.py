@@ -9,6 +9,7 @@ import logging
 import time
 
 import bundle
+import infra
 import observability as obs
 from api_client import ApiError
 
@@ -49,13 +50,23 @@ def _publish_with_retry(queue, body, attempts, sleep):
             sleep(2 ** attempt)
 
 
-def handle_collect(body, *, api, scrape, storage, queue, sleep=time.sleep, publish_attempts=3):
-    """Processa uma mensagem `collect`. Levanta exceção só para o que vale reentregar (infra fora do ar, mensagem inválida)."""
+def handle_collect(body, *, api, scrape, storage, queue, sleep=time.sleep, publish_attempts=3, limiter=None):
+    """Processa uma mensagem `collect`. Levanta exceção só para o que vale reentregar (infra fora do ar, mensagem inválida).
+
+    Com `limiter` (ADR-0005), conta acima do ritmo levanta `infra.Defer`: a mensagem volta depois e o job segue `queued`.
+    """
     req = parse_request(body)
     job_id, url = req["job_id"], req["linkedin_url"]
     extra = {"job_id": job_id}
 
+    account = req.get("account_id") or "default"
+
     status = api.get_job(job_id).get("status")
+    if status in ("queued", "collecting") and limiter is not None:
+        wait = limiter.check(account)
+        if wait > 0:
+            log.info("Conta %s acima do ritmo: adiando o job por ~%.0fs", account, wait, extra={"job_id": job_id})
+            raise infra.Defer(wait, f"conta {account} acima do ritmo permitido")
     if status == "queued":
         try:
             api.set_status(job_id, "collecting")
@@ -70,6 +81,8 @@ def handle_collect(body, *, api, scrape, storage, queue, sleep=time.sleep, publi
         log.info("Job em %s: nada a coletar", status, extra=extra)
         return "skipped"
 
+    if limiter is not None:
+        limiter.record_start(account)
     try:
         outcome = scrape(url, job_id)
     except Exception as e:
