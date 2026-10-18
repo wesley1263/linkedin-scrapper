@@ -54,6 +54,10 @@ ADRs (todos com status Proposto) e o roteiro para virar serviço estão em `.adr
 
 Coletor (este) e `linkedin-enrichment` (parsers Go) são repositórios separados, ligados só por `PARSER_BIN_DIR` e pelo contrato do manifest (`schemas/manifest.v1.schema.json`, ainda validado só aqui por `bundle.validate_manifest`; o Go vai precisar de uma cópia com teste que as compare quando passar a ler o zip). Não há repositório `linkedin-enrichment-dev`: o compose de infra local fica em `dev/docker-compose.yml` e será revisto quando houver Dockerfiles dos serviços.
 
+## Convenções de API
+
+Qualquer API HTTP **neste repositório (coletor Python)** usa **FastAPI** (+ uvicorn), com modelos Pydantic e testes via `fastapi.testclient`. O serviço Go (`linkedin-enrichment`) continua com Gin: não misturar. Ainda não existe nenhuma API HTTP no coletor; ao criar a primeira, adicionar `fastapi`/`uvicorn` ao `Pipfile` e manter a lógica fora dos handlers (como em `collect_worker.py`) para testar sem subir servidor.
+
 ## Fluxo de trabalho
 
 - Ao iniciar uma tarefa nova, crie antes um branch a partir do estado atual com nome `<tipo>/<descricao-curta-em-kebab-case>` (`feat/`, `fix/`, `refactor/`, `docs/`, `test/`, `chore/`), como já usado no histórico (`fix/education-parser-new-layout`, `docs/architecture-adrs`). Uma tarefa por branch, **sempre**: mesmo que dependa de trabalho ainda sem commit, não reaproveite o branch da tarefa anterior.
