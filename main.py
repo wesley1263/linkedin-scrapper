@@ -15,6 +15,7 @@ import bundle
 import collect_worker
 import infra
 from api_client import ApiClient
+from ratelimit import AccountLimiter
 import time
 import tempfile
 import subprocess
@@ -515,13 +516,16 @@ def run_worker(visible):
         raise SystemExit("Defina QUEUE_DRIVER (o worker precisa consumir o tópico collect)")
     storage = infra.new_storage()
     api = ApiClient(api_url, api_token=os.getenv("API_TOKEN"), internal_token=internal_token)
+    limiter = AccountLimiter.from_env(os.environ)
+    log.info("Ritmo: %ds entre perfis, %d por dia (0 = sem limite); estado em %s",
+             limiter.min_interval, limiter.max_per_day, limiter.state_path)
 
     def scrape(url, job_id):
         return scrape_profile(url, email, password, visible, job_id, parse=False)
 
     log.info("Worker collect iniciado (topic=%s)", collect_worker.COLLECT_TOPIC)
     queue.consume(collect_worker.COLLECT_TOPIC, lambda msg: collect_worker.handle_collect(
-        msg.body, api=api, scrape=scrape, storage=storage, queue=queue))
+        msg.body, api=api, scrape=scrape, storage=storage, queue=queue, limiter=limiter))
 
 
 # Uso: python main.py [--visible] [<profile_url>]      (CLI: coleta e parseia localmente)

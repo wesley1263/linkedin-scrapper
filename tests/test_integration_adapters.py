@@ -42,13 +42,6 @@ class RabbitMQQueueTest(unittest.TestCase):
         self.topic = f"test-{uuid.uuid4().hex[:8]}"
         self.queue = RabbitMQQueue(AMQP_URL, max_attempts=3, backoff=lambda attempt: 0, idle_timeout=2)
 
-    def tearDown(self):
-        import pika
-        with pika.BlockingConnection(pika.URLParameters(AMQP_URL)) as conn:
-            ch = conn.channel()
-            ch.queue_delete(self.topic)
-            ch.queue_delete(f"{self.topic}.dlq")
-
     def test_publish_consume_ack(self):
         got = []
         self.queue.publish(self.topic, b"a")
@@ -83,6 +76,33 @@ class RabbitMQQueueTest(unittest.TestCase):
             method, _, body = conn.channel().basic_get(f"{self.topic}.dlq", auto_ack=True)
         self.assertIsNotNone(method, "mensagem não chegou à DLQ")
         self.assertEqual(body, b"x")
+
+    def test_defer_returns_the_message_after_the_retry_delay_without_counting_attempts(self):
+        import infra
+        from infra.rabbitmq import RabbitMQQueue
+        q = RabbitMQQueue(AMQP_URL, max_attempts=2, backoff=lambda attempt: 0, idle_timeout=5, retry_delay=1)
+        seen = []
+
+        def handle(msg):
+            seen.append(msg.attempt)
+            if len(seen) < 3:
+                raise infra.Defer(1, "limite de ritmo")  # 2 adiamentos seguidos: mais que max_attempts
+
+        q.publish(self.topic, b"x")
+        q.consume(self.topic, handle)
+        self.assertEqual(seen, [1, 1, 1])  # adiar não incrementa a tentativa nem manda para a DLQ
+        import pika
+        with pika.BlockingConnection(pika.URLParameters(AMQP_URL)) as conn:
+            method, _, _ = conn.channel().basic_get(f"{self.topic}.dlq", auto_ack=True)
+        self.assertIsNone(method)
+
+    def tearDown(self):
+        import pika
+        with pika.BlockingConnection(pika.URLParameters(AMQP_URL)) as conn:
+            ch = conn.channel()
+            ch.queue_delete(self.topic)
+            ch.queue_delete(f"{self.topic}.dlq")
+            ch.queue_delete(f"{self.topic}.retry")
 
 
 if __name__ == "__main__":

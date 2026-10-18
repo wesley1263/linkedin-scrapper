@@ -178,6 +178,57 @@ class CollectWorkerTest(unittest.TestCase):
         self.assertEqual(self.scrape_calls, [])
         self.assertEqual(self.events, [])
 
+    # --- limite de ritmo (ADR-0005) ------------------------------------------------------------------
+
+    class FakeLimiter:
+        def __init__(self, wait=0):
+            self.wait, self.calls = wait, []
+
+        def check(self, account):
+            self.calls.append(("check", account))
+            return self.wait
+
+        def record_start(self, account):
+            self.calls.append(("record", account))
+
+    def test_defers_when_account_is_over_the_limit_without_touching_the_job(self):
+        limiter = self.FakeLimiter(wait=42)
+        with self.assertLogs("scraper.collect", level="INFO") as logs, self.assertRaises(infra.Defer) as ctx:
+            self.run_handler(message(account_id="acc1"), limiter=limiter)
+        self.assertTrue(any("acc1" in line and "42" in line for line in logs.output), logs.output)
+        self.assertEqual(ctx.exception.delay, 42)
+        self.assertEqual(limiter.calls, [("check", "acc1")])
+        self.assertEqual(self.api.statuses_set(), [])  # o job continua queued
+        self.assertEqual(self.scrape_calls, [])
+
+    def test_records_start_before_scraping_when_allowed(self):
+        limiter = self.FakeLimiter()
+        self.run_handler(message(account_id="acc1"), limiter=limiter)
+        self.assertEqual(limiter.calls, [("check", "acc1"), ("record", "acc1")])
+        self.assertEqual(self.events[0], "scrape")
+
+    def test_account_defaults_when_message_has_none(self):
+        limiter = self.FakeLimiter()
+        self.run_handler(limiter=limiter)
+        self.assertEqual(limiter.calls[0], ("check", "default"))
+
+    def test_job_that_needs_no_collection_is_skipped_without_deferring(self):
+        self.api.status = "done"
+        limiter = self.FakeLimiter(wait=99)
+        self.run_handler(limiter=limiter)  # não levanta Defer: nada a coletar, a mensagem é confirmada
+        self.assertEqual(limiter.calls, [])
+
+    def test_resumed_collecting_job_also_respects_the_limit(self):
+        self.api.status = "collecting"
+        with self.assertRaises(infra.Defer):
+            self.run_handler(limiter=self.FakeLimiter(wait=10))
+
+    def test_conflict_on_collecting_does_not_consume_a_slot(self):
+        self.api.set_errors["collecting"] = ApiError("conflito", status=409, current_status="collecting")
+        limiter = self.FakeLimiter()
+        self.run_handler(limiter=limiter)
+        self.assertNotIn(("record", "default"), limiter.calls)
+
     # --- resultados que não geram zip ---------------------------------------------------------------
 
     def test_auth_required(self):

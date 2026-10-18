@@ -113,7 +113,7 @@ STORAGE_DRIVER=s3 S3_BUCKET=raw-profiles S3_ENDPOINT=... S3_ACCESS_KEY=... S3_SE
 python main.py --worker            # --visible para resolver checkpoint/2FA
 ```
 
-Consome o tópico `collect`, coleta o perfil, grava o zip no storage, marca o job como `collected` na API e publica em `parse` (o parser worker do `linkedin-enrichment` faz o resto). Não roda os parsers localmente.
+Respeita o limite de ritmo da conta (`MIN_SECONDS_BETWEEN_PROFILES`, `MAX_PROFILES_PER_DAY`, `RATE_STATE_FILE`): acima dele a mensagem é adiada e o job continua `queued`. Consome o tópico `collect`, coleta o perfil, grava o zip no storage, marca o job como `collected` na API e publica em `parse` (o parser worker do `linkedin-enrichment` faz o resto). Não roda os parsers localmente.
 
 ### Download de PDF do Perfil
 

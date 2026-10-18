@@ -38,6 +38,33 @@ class MemoryQueueTest(unittest.TestCase):
         self.assertEqual(q.dead_letters["parse"], [])
 
 
+class DeferTest(unittest.TestCase):
+    def test_defer_does_not_count_as_failure(self):
+        q, calls = infra.MemoryQueue(max_attempts=2), []
+
+        def handle(msg):
+            calls.append(msg.attempt)
+            raise infra.Defer(60, "limite de ritmo")
+
+        q.publish("collect", b"x")
+        q.consume("collect", handle)
+        self.assertEqual(calls, [1])                       # não é reentregue no mesmo ciclo
+        self.assertEqual(q.dead_letters["collect"], [])    # e nunca vai para a DLQ
+        self.assertEqual([(m.body, m.attempt, d) for m, d in q.deferred["collect"]], [(b"x", 1, 60)])
+
+    def test_released_deferred_message_keeps_attempt_and_is_redelivered(self):
+        q, seen = infra.MemoryQueue(), []
+        q.publish("collect", b"x")
+        q.consume("collect", lambda m: (_ for _ in ()).throw(infra.Defer(5)))
+        q.release_deferred("collect")
+        q.consume("collect", lambda m: seen.append((m.body, m.attempt)))
+        self.assertEqual(seen, [(b"x", 1)])
+        self.assertEqual(q.deferred["collect"], [])
+
+    def test_defer_carries_delay(self):
+        self.assertEqual(infra.Defer(12.5).delay, 12.5)
+
+
 class FsStorageTest(unittest.TestCase):
     def test_put_get_and_immutability(self):
         with tempfile.TemporaryDirectory() as d:
