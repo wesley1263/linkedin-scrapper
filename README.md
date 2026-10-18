@@ -91,6 +91,51 @@ export LINKEDIN_PASSWORD="sua-senha"
 
 **ATENÇÃO**: Nunca compartilhe suas credenciais publicamente ou faça commit delas no repositório!
 
+## Como rodar
+
+Tudo roda em containers: não precisa instalar Python, Go, Chrome, Postgres, RabbitMQ nem S3 na máquina, só Docker com Compose. Os repositórios ficam lado a lado (`../linkedin-enrichment`); o `docker-compose.yml` deste repo inclui o do outro e acrescenta o coletor.
+
+### Local (Docker Compose)
+
+```bash
+cp .env.example .env              # preencha LINKEDIN_EMAIL e LINKEDIN_PASSWORD
+docker compose up -d --build      # Postgres, S3Mock, RabbitMQ, API e parser worker (live reload com air) + coletor
+docker compose logs -f collector
+
+curl -XPOST localhost:8080/enrichments -H "Authorization: Bearer segredo" \
+     -d '{"linkedin_url":"https://www.linkedin.com/in/username/"}'
+curl localhost:8080/enrichments/<job_id> -H "Authorization: Bearer segredo"   # queued → … → done
+docker compose down               # -v apaga também os dados (Postgres, sessão do Chrome)
+```
+
+- Console do RabbitMQ em http://localhost:15672 (`guest`/`guest`), API em `localhost:8080`, S3 em `localhost:9000`. Os tokens e senhas do compose são só de desenvolvimento.
+- O coletor roda **headless** dentro do container, com a sessão do Chrome no volume `collector-data` (sobrevive a `down`, some com `down -v`). Como não há janela, **não dá para resolver checkpoint/2FA** dentro do container: se o LinkedIn pedir verificação, o job termina `auth_required`. Para conseguir a sessão nesse caso, faça o login uma vez fora do container (ver "Scraping standalone" abaixo).
+- Edições no código do coletor valem após `docker compose restart collector`; na API e no parser worker, o air recompila sozinho.
+- Limite de ritmo: `MIN_SECONDS_BETWEEN_PROFILES`, `MAX_PROFILES_PER_DAY` (opcionais no `.env`).
+
+Testes (também em container):
+
+```bash
+docker compose run --rm collector-test                                                   # unitários
+INTEGRATION=1 docker compose run --rm collector-test python -m unittest tests.test_integration_adapters -v
+```
+
+### Remoto
+
+Ainda **não há imagens publicadas nem compose de produção** (ADR-0008/0013). Os `Dockerfile`s existem (o do `linkedin-enrichment` tem os alvos `api` e `parser-worker`, enxutos; o do coletor é esta imagem com Chromium), então o caminho remoto é construir as imagens e apontá-las para Postgres, broker AMQP e bucket S3 gerenciados, só por variáveis de ambiente:
+
+- **API e parser worker**: `DATABASE_URL`, `QUEUE_DRIVER=rabbitmq` + `AMQP_URL`, `STORAGE_DRIVER=s3` + `S3_BUCKET`/`S3_ENDPOINT`/`S3_ACCESS_KEY`/`S3_SECRET_KEY`/`S3_REGION`, `API_TOKEN`, `INTERNAL_TOKEN`. Os mesmos valores de fila e storage valem para o coletor (`sqs`/`gcs`/`pubsub` não existem).
+- **Coletor** (`python main.py --worker`): `API_URL` apontando para a API, `INTERNAL_TOKEN`, `LINKEDIN_*`. Rode **um por conta**; `/data` (sessão do Chrome e `RATE_STATE_FILE`) precisa de volume persistente, e o IP de saída deve ser estável.
+- **Segredos** só por secret manager/env; não reutilize os valores do compose. A sessão do Chrome é uma credencial ativa. Mensagens que falham 5 vezes vão para `<topic>.dlq` e merecem alerta.
+
+### Scraping standalone (sem fila, opcional)
+
+Para o primeiro login com janela visível (2FA) ou para um perfil avulso, sem o compose, é preciso Python 3.12, Chrome e os parsers compilados na máquina (ver Instalação):
+
+```bash
+pipenv run python main.py --visible https://www.linkedin.com/in/username/   # 1ª vez; depois sem --visible
+```
+
 ## Uso
 
 ### Scraping de Perfil Completo
