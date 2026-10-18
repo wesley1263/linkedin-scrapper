@@ -55,7 +55,9 @@ Coletor (este) e `linkedin-enrichment` (parsers Go) são repositórios separados
 
 ## Fluxo de trabalho
 
-- Ao iniciar uma tarefa nova, crie antes um branch a partir do estado atual com nome `<tipo>/<descricao-curta-em-kebab-case>` (`feat/`, `fix/`, `refactor/`, `docs/`, `test/`, `chore/`), como já usado no histórico (`fix/education-parser-new-layout`, `docs/architecture-adrs`). Uma tarefa por branch.
+- Ao iniciar uma tarefa nova, crie antes um branch a partir do estado atual com nome `<tipo>/<descricao-curta-em-kebab-case>` (`feat/`, `fix/`, `refactor/`, `docs/`, `test/`, `chore/`), como já usado no histórico (`fix/education-parser-new-layout`, `docs/architecture-adrs`). Uma tarefa por branch, **sempre**: mesmo que dependa de trabalho ainda sem commit, não reaproveite o branch da tarefa anterior.
+- Changelog: depois de qualquer implementação ou refatoração, acrescente uma linha em `[Unreleased]` do `CHANGELOG.md` (Added/Changed/Fixed/Removed, Keep a Changelog), descrevendo o efeito para quem usa o projeto, no mesmo branch da mudança. Só documentação trivial dispensa.
+- Testes primeiro (TDD): antes de qualquer implementação nova (feature, correção de bug ou mudança de comportamento), escreva os testes que descrevem o resultado esperado e rode-os vendo-os **falhar** (pelo motivo certo, não por erro de sintaxe/import); só então implemente até passarem. Ao reportar, diga que os testes falharam antes. Mudança só de documentação ou refatoração coberta por testes existentes não precisa de teste novo.
 - Não faça commit nem push: deixe as alterações no working tree para o usuário revisar e commitar. Só commite se ele pedir.
 
 ## Cuidados
