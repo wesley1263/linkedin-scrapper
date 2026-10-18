@@ -35,6 +35,17 @@ class SectionResult:
         return self.collect_status == "ok" and self.parse_status in (PARSE_OK, PARSE_EMPTY)
 
 
+@dataclass
+class CollectOutcome:
+    """Resultado de uma coleta de perfil (o que `scrape` devolve ao worker `collect`)."""
+    status: str                       # success / partial / failed / auth_required / not_found
+    results: list                     # [SectionResult]
+    output_dir: str                   # onde estão os HTMLs
+    base_url: str
+    dir_name: str                     # slug do perfil (diretório e chave no storage)
+    started_at: datetime
+
+
 def job_status(sections, auth_ok=True, found=True):
     """Status do job a partir do resultado de cada seção."""
     if not auth_ok:
@@ -47,6 +58,18 @@ def job_status(sections, auth_ok=True, found=True):
     if good == len(sections):
         return SUCCESS
     return PARTIAL if good else FAILED
+
+
+def collect_job_status(sections, auth_ok=True, found=True):
+    """Status do job no modo worker, que só coleta (o parsing é do parser worker): usa o collect_status."""
+    if not auth_ok:
+        return AUTH_REQUIRED
+    if not found:
+        return NOT_FOUND
+    collected = sum(1 for s in sections if s.collect_status == "ok")
+    if not sections or not collected:
+        return FAILED
+    return SUCCESS if collected == len(sections) else PARTIAL
 
 
 def exit_code(status):

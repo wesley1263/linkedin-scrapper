@@ -6,6 +6,8 @@ Formato [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). Toda implem
 ## [Unreleased]
 
 ### Added
+- Modo serviço `python main.py --worker` (ADR-0003): consome o tópico `collect` (job criado pela API), coleta o perfil sem rodar os parsers locais, grava o zip no storage, marca o job `collected` e só então publica em `parse`. Status do job pela API (`api_client.py`, endpoint interno do enrichment): `queued → collecting → collected | collect_failed | auth_required`. Mensagem repetida é segura (job `collecting` é retomado, outros status são ignorados); perfil inexistente, falha total ou erro inesperado viram `collect_failed` com o motivo, e `auth_required` quando o login é necessário. Lógica em `collect_worker.py` (testada sem Selenium).
+- `bundle.store_bundle`, `bundle.expected_urls`/`SECTION_PATHS` e `observability.CollectOutcome`/`collect_job_status` (status do job só pelo `collect_status`, já que o parsing é do parser worker).
 - Fila e storage plugáveis (ADR-0014): pacote `infra/` com portas `Queue`/`ObjectStorage`, fábricas por `QUEUE_DRIVER`/`STORAGE_DRIVER` e adaptadores `memory`, `fs`, `s3` (boto3, escrita condicional) e `rabbitmq` (pika, DLQ e retentativa com backoff); testes de integração em `tests/test_integration_adapters.py`.
 - Zip imutável + `manifest.json` por coleta (ADR-0010): `bundle.py`, schema em `schemas/manifest.v1.schema.json`, publicação da mensagem `parse` com a chave do zip.
 - Status explícito e observabilidade (ADR-0006): `observability.py`, `status.json` por job, exit codes 0/2/1, logging estruturado (`LOG_FORMAT=json`), screenshot/HTML das seções que falham.
@@ -14,6 +16,7 @@ Formato [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). Toda implem
 - Regras de fluxo no `CLAUDE.md` (branch por tarefa, sem commit automático, testes primeiro).
 
 ### Changed
+- `main.py` separado em `scrape_profile()` (coleta, devolve `CollectOutcome`) e os modos CLI/worker; o CLI continua coletando, parseando localmente e publicando em `parse` como antes.
 - Parsers Go extraídos para o repositório `linkedin-enrichment` (ADR-0001/0013); o repositório `-dev` foi adiado.
 - Compose usa `adobe/s3mock` no lugar do MinIO (que deixou de publicar imagens).
 - Parsers rodam de forma síncrona logo após salvar cada seção; falha em uma seção não derruba as outras.

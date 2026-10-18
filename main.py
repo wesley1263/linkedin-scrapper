@@ -12,7 +12,9 @@ from selenium.webdriver.chrome.options import Options
 from selenium.common.exceptions import TimeoutException, WebDriverException
 import observability as obs
 import bundle
+import collect_worker
 import infra
+from api_client import ApiClient
 import time
 import tempfile
 import subprocess
@@ -350,11 +352,11 @@ class LinkedInScraper:
 # Onde ficam os binários dos parsers Go (repositório linkedin-enrichment, clonado ao lado; ADR-0013)
 PARSER_BIN_DIR = os.getenv("PARSER_BIN_DIR", "../linkedin-enrichment/bin")
 
-# (arquivo, path relativo ao perfil, binário do parser)
+# (seção, path relativo ao perfil, binário do parser); os paths vêm de bundle.SECTION_PATHS (fonte única)
 DETAIL_SECTIONS = [
-    ("experience", "details/experience/", "experience-parser"),
-    ("education", "details/education/", "education-parser"),
-    ("languages", "details/languages/", "language-parser"),
+    ("experience", bundle.SECTION_PATHS["experience"], "experience-parser"),
+    ("education", bundle.SECTION_PATHS["education"], "education-parser"),
+    ("languages", bundle.SECTION_PATHS["languages"], "language-parser"),
 ]
 
 
@@ -380,10 +382,11 @@ def collect_detail(scraper, tab, name, output_dir):
     return scraper.driver.current_url
 
 
-def process_section(scraper, name, collect, parser, output_dir):
-    """Coleta e parseia uma seção; qualquer falha vira um SectionResult em vez de derrubar o job.
+def process_section(scraper, name, collect, parser, output_dir, parse=True):
+    """Coleta e (se `parse`) parseia uma seção; qualquer falha vira um SectionResult em vez de derrubar o job.
 
     O parser roda na hora (leva milissegundos) para que, se falhar, o screenshot ainda seja da aba da seção.
+    No modo worker (`parse=False`) só coleta: o parsing é do parser worker (linkedin-enrichment).
     """
     extra = {"section": name}
     start = time.time()
@@ -397,13 +400,18 @@ def process_section(scraper, name, collect, parser, output_dir):
         log.error("Falha ao coletar: %s %s", type(e).__name__, message, extra=extra)
         result = obs.SectionResult(section=name, collect_status="failed", error=f"{type(e).__name__}: {message}")
     else:
-        result = obs.run_parser(os.path.join(PARSER_BIN_DIR, parser), f"{output_dir}/{name}.html",
-                                f"{output_dir}/{name}.json", name)
+        if parse:
+            result = obs.run_parser(os.path.join(PARSER_BIN_DIR, parser), f"{output_dir}/{name}.html",
+                                    f"{output_dir}/{name}.json", name)
+        else:
+            result = obs.SectionResult(section=name)
 
     result.final_url = final_url
     result.duration_ms = int((time.time() - start) * 1000)
     extra["duration_ms"] = result.duration_ms
-    if result.ok:
+    if not parse and result.collect_status == "ok":
+        log.info("Seção %s coletada", name, extra=extra)
+    elif result.ok:
         log.info("Seção %s: %s (%d itens)", name, result.parse_status, result.items, extra=extra)
     else:
         log.error("Seção %s falhou: %s", name, result.error or result.parse_status, extra=extra)
@@ -411,49 +419,14 @@ def process_section(scraper, name, collect, parser, output_dir):
     return result
 
 
-def write_collection_bundle(job_id, base_url, dir_name, output_dir, collected_at, results):
-    """Empacota os HTMLs + manifest.json (ADR-0010), grava no storage (ADR-0014) e publica no tópico `parse` se há fila."""
-    expected = {"profile": base_url, **{name: f"{base_url}{path}" for name, path, _ in DETAIL_SECTIONS}}
-    sections = {
-        r.section: (f"{r.section}.html", bundle.section_status(r, expected[r.section]), r.final_url)
-        for r in results
-    }
-    if not any(status in (bundle.OK, bundle.REDIRECTED) for _, status, _ in sections.values()):
-        log.warning("Nenhum HTML coletado: zip não gerado")
-        return
-    manifest = bundle.build_manifest(job_id, os.getenv("LINKEDIN_ACCOUNT_ID"), base_url, collected_at, sections)
-    try:
-        key = bundle.bundle_key(dir_name, manifest)
-        infra.new_storage().put(key, bundle.build_zip(output_dir, manifest))
-        log.info("Zip da coleta gravado: %s", key)
-        queue = infra.new_queue()
-        if queue:
-            queue.publish("parse", bundle.parse_message(manifest, key))
-            log.info("Publicado em parse: %s", key)
-    except (OSError, ValueError):
-        log.exception("Não foi possível gravar/publicar o zip da coleta")
-
-
-# Uso: python main.py [--visible] [<profile_url>]
-# Código de saída: 0 success, 2 partial, 1 demais status (failed, auth_required, not_found)
-if __name__ == "__main__":
-    email = os.getenv("LINKEDIN_EMAIL")
-    password = os.getenv("LINKEDIN_PASSWORD")
-    if not email or not password:
-        raise SystemExit("Defina LINKEDIN_EMAIL e LINKEDIN_PASSWORD no ambiente")
-
-    args = sys.argv[1:]
-    visible = "--visible" in args
-    urls = [a for a in args if a != "--visible"]
-    profile_url = urls[0] if urls else input("Insira o URL do perfil a ser analisado: ")
-
+def scrape_profile(profile_url, email, password, visible, job_id=None, parse=True):
+    """Coleta o perfil e grava HTMLs, status.json (e JSONs, se `parse`) em output/<perfil>/. Não termina o processo."""
     base_url = profile_url.split("?")[0].rstrip("/") + "/"
     dir_name = base_url.replace("https://www.linkedin.com/in/", "").replace("/", "")
     output_dir = f"./output/{dir_name}"
     os.makedirs(output_dir, exist_ok=True)
 
-    obs.setup_logging()
-    job_id = uuid.uuid4().hex[:8]
+    job_id = job_id or uuid.uuid4().hex[:8]
     obs.CONTEXT.update(job_id=job_id, profile=base_url)
     started_at = datetime.now(timezone.utc)
     start_time = time.time()
@@ -478,11 +451,11 @@ if __name__ == "__main__":
 
             results.append(process_section(
                 scraper, "profile", lambda: collect_profile(scraper, main_tab, base_url, output_dir),
-                "linkedin-parser", output_dir))
+                "linkedin-parser", output_dir, parse))
             for name, _, parser in DETAIL_SECTIONS:
                 results.append(process_section(
                     scraper, name, lambda name=name: collect_detail(scraper, tabs[name], name, output_dir),
-                    parser, output_dir))
+                    parser, output_dir, parse))
     except ProfileNotFound:
         found = False
         log.error("Perfil não encontrado: %s", base_url)
@@ -497,11 +470,76 @@ if __name__ == "__main__":
         results += [obs.SectionResult(section=name, collect_status="failed", error="não processada")
                     for name, _ in all_sections if name not in done]
 
-    status = obs.job_status(results, auth_ok=auth_ok, found=found)
+    status_fn = obs.job_status if parse else obs.collect_job_status
+    status = status_fn(results, auth_ok=auth_ok, found=found)
     duration_ms = int((time.time() - start_time) * 1000)
     obs.write_status_json(f"{output_dir}/status.json", job_id, base_url, status, results, started_at, duration_ms)
-    if auth_ok and found:
-        write_collection_bundle(job_id, base_url, dir_name, output_dir, started_at, results)
     log.info("Job finalizado: %s em %.1fs (detalhes em %s/status.json)", status, duration_ms / 1000, output_dir,
              extra={"duration_ms": duration_ms})
-    sys.exit(obs.exit_code(status))
+    return obs.CollectOutcome(status=status, results=results, output_dir=output_dir, base_url=base_url,
+                              dir_name=dir_name, started_at=started_at)
+
+
+def write_collection_bundle(job_id, outcome):
+    """Modo CLI: empacota os HTMLs + manifest.json (ADR-0010), grava no storage (ADR-0014) e publica em `parse` se há fila."""
+    try:
+        stored = bundle.store_bundle(infra.new_storage(), job_id, os.getenv("LINKEDIN_ACCOUNT_ID"), outcome.base_url,
+                                     outcome.dir_name, outcome.output_dir, outcome.started_at, outcome.results)
+        if stored is None:
+            log.warning("Nenhum HTML coletado: zip não gerado")
+            return
+        key, manifest = stored
+        log.info("Zip da coleta gravado: %s", key)
+        queue = infra.new_queue()
+        if queue:
+            queue.publish(collect_worker.PARSE_TOPIC, bundle.parse_message(manifest, key))
+            log.info("Publicado em parse: %s", key)
+    except (OSError, ValueError):
+        log.exception("Não foi possível gravar/publicar o zip da coleta")
+
+
+def require_env(*names):
+    missing = [n for n in names if not os.getenv(n)]
+    if missing:
+        raise SystemExit("Defina no ambiente: " + ", ".join(missing))
+    return [os.environ[n] for n in names]
+
+
+def run_worker(visible):
+    """Modo serviço: consome `collect` (job criado pela API), coleta, guarda o zip e publica em `parse` (ADR-0003)."""
+    email, password = require_env("LINKEDIN_EMAIL", "LINKEDIN_PASSWORD")
+    api_url, internal_token = require_env("API_URL", "INTERNAL_TOKEN")
+    obs.setup_logging()
+    queue = infra.new_queue()
+    if queue is None:
+        raise SystemExit("Defina QUEUE_DRIVER (o worker precisa consumir o tópico collect)")
+    storage = infra.new_storage()
+    api = ApiClient(api_url, api_token=os.getenv("API_TOKEN"), internal_token=internal_token)
+
+    def scrape(url, job_id):
+        return scrape_profile(url, email, password, visible, job_id, parse=False)
+
+    log.info("Worker collect iniciado (topic=%s)", collect_worker.COLLECT_TOPIC)
+    queue.consume(collect_worker.COLLECT_TOPIC, lambda msg: collect_worker.handle_collect(
+        msg.body, api=api, scrape=scrape, storage=storage, queue=queue))
+
+
+# Uso: python main.py [--visible] [<profile_url>]      (CLI: coleta e parseia localmente)
+#      python main.py --worker [--visible]              (serviço: consome o tópico collect)
+# Código de saída do CLI: 0 success, 2 partial, 1 demais status (failed, auth_required, not_found)
+if __name__ == "__main__":
+    args = sys.argv[1:]
+    visible = "--visible" in args
+    if "--worker" in args:
+        run_worker(visible)
+        sys.exit(0)
+
+    email, password = require_env("LINKEDIN_EMAIL", "LINKEDIN_PASSWORD")
+    urls = [a for a in args if not a.startswith("--")]
+    profile_url = urls[0] if urls else input("Insira o URL do perfil a ser analisado: ")
+    obs.setup_logging()
+    job_id = uuid.uuid4().hex[:8]
+    outcome = scrape_profile(profile_url, email, password, visible, job_id)
+    if outcome.status not in (obs.AUTH_REQUIRED, obs.NOT_FOUND):
+        write_collection_bundle(job_id, outcome)
+    sys.exit(obs.exit_code(outcome.status))

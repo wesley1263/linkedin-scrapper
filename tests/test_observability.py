@@ -108,5 +108,26 @@ class OutputTest(unittest.TestCase):
                          ("feito ok", "abc123", "experience", 42))
 
 
+class CollectJobStatusTest(unittest.TestCase):
+    """Modo worker: só coleta (o parsing é do parser worker), então o status vem do collect_status."""
+
+    def sections(self, *collect):
+        return [obs.SectionResult(f"s{i}", collect_status=c) for i, c in enumerate(collect)]
+
+    def test_all_collected_is_success_even_without_parse(self):
+        self.assertEqual(obs.collect_job_status(self.sections("ok", "ok")), obs.SUCCESS)
+
+    def test_some_collected_is_partial(self):
+        self.assertEqual(obs.collect_job_status(self.sections("ok", "failed")), obs.PARTIAL)
+
+    def test_none_collected_is_failed(self):
+        self.assertEqual(obs.collect_job_status(self.sections("failed", "failed")), obs.FAILED)
+        self.assertEqual(obs.collect_job_status([]), obs.FAILED)
+
+    def test_auth_and_not_found_take_precedence(self):
+        self.assertEqual(obs.collect_job_status(self.sections("ok"), auth_ok=False), obs.AUTH_REQUIRED)
+        self.assertEqual(obs.collect_job_status(self.sections("ok"), found=False), obs.NOT_FOUND)
+
+
 if __name__ == "__main__":
     unittest.main()
