@@ -1,7 +1,7 @@
 # Ambiente completo sem instalar nada na máquina: inclui a infra, a API e o parser worker do repo irmão
 # (../linkedin-enrichment) e adiciona o coletor. `docker compose up -d --build`.
 # Valores fixos são só de desenvolvimento local. Credenciais do LinkedIn: copie `.env.example` para `.env`.
-name: linkedin-enrichment
+name: linkedin
 
 include:
   - ../linkedin-enrichment/docker-compose.yml
