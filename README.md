@@ -108,6 +108,7 @@ curl localhost:8080/enrichments/<job_id> -H "Authorization: Bearer segredo"   # 
 docker compose down               # -v apaga também os dados (Postgres, sessão do Chrome)
 ```
 
+- **Este é o único comando para o pipeline completo**: o compose inclui o do `linkedin-enrichment`, então API, worker e infra sobem junto com o coletor, num stack só. Não suba também o compose do repo Go (mesmas portas; os containers ficam sem rede e a API falha com "no such host" para `postgres`). Este compose usa o projeto `linkedin` e o do `linkedin-enrichment` usa `linkedin-enrichment`: dá para rodar um ou outro (as portas são as mesmas, então não os dois ao mesmo tempo), e um `down` num repo não derruba nem quebra a rede do outro. Se ficou algo da versão antiga (`linkedin-enrichment-collector-1`), rode `docker compose -p linkedin-enrichment down --remove-orphans`.
 - Console do RabbitMQ em http://localhost:15672 (`guest`/`guest`), API em `localhost:8080`, S3 em `localhost:9000`. Os tokens e senhas do compose são só de desenvolvimento.
 - O coletor roda **headless** dentro do container, com a sessão do Chrome no volume `collector-data` (sobrevive a `down`, some com `down -v`). Como não há janela, **não dá para resolver checkpoint/2FA** dentro do container: se o LinkedIn pedir verificação, o job termina `auth_required`. Para conseguir a sessão nesse caso, faça o login uma vez fora do container (ver "Scraping standalone" abaixo).
 - Edições no código do coletor valem após `docker compose restart collector`; na API e no parser worker, o air recompila sozinho.

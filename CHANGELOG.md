@@ -26,6 +26,7 @@ Formato [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). Toda implem
 - Parsers rodam de forma síncrona logo após salvar cada seção; falha em uma seção não derruba as outras.
 
 ### Fixed
+- Compose do coletor passa a usar o projeto `linkedin` (antes dividia o nome `linkedin-enrichment` com o compose do repo Go): um `docker compose down` no repo Go removia a rede e o coletor parado falhava ao subir com "network ... not found".
 - Caminho do perfil do Chrome no macOS (`~/.linkedin_chrome_profile`, `CHROME_PROFILE_DIR`).
 - Login com o novo layout (campos com ids aleatórios e formulário duplicado); credenciais lidas do `.env`.
 - `profile.html` saindo como a página "Post": só o "more" do About é clicado.
